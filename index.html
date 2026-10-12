@@ -90,7 +90,7 @@ td.r,th.r{text-align:right}
 .checks input{width:auto;margin:0}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
-#toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:9px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+#toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
 .receipt{background:#fff;color:#111;border:1px solid #ccd;border-radius:8px;padding:22px;font-family:Georgia,"Times New Roman",serif}
 .receipt h3{margin:0;font-size:20px;letter-spacing:1px}
 .receipt .rh{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:14px}
@@ -114,6 +114,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
   .receipt{position:absolute;left:0;top:0;width:100%;border:0}
 }
 </style>
+
 <!-- Conexión a Firebase Firestore para sincronización en la nube -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -128,11 +129,9 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
   };
 
-  // Inicializar Firebase
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  // Activar detección para la bitácora
   window.claude = {
     use: async (service) => {
       if (service === 'db') return db;
@@ -140,7 +139,6 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     }
   };
 </script>
-
 </head>
 <body>
 <div class="wrap">
@@ -156,8 +154,8 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <div id="toast"></div>
 
 <script>
-/* ============ DATOS INICIALES (tomados de tu Excel, SIN claves) ============ */
-const SEED = []; // (lista inicial retirada: los clientes viven solo en tu navegador / respaldo)
+/* ============ DATOS INICIALES ============ */
+const SEED = []; 
 
 /* ============ CONSTANTES ============ */
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -217,12 +215,37 @@ function defaultPeriod(t){
   return String(y-1);
 }
 function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
+
+/* ---- CÁLCULO DE VENCIMIENTOS SRI ECUADOR ---- */
 function dueDate(c,k){
   const dia=DIA_POR_DIGITO[digito9(c.ruc)]||28,t=ptype(k);
-  if(t==='M'){const [y,m]=k.split('-').map(Number);return new Date(y,m,dia)}
-  if(t==='S'){const [y,s]=k.split('-S');return s==='1'?new Date(+y,6,dia):new Date(+y+1,0,dia)}
-  return new Date(+k+1,c.tipo==='SOCIEDAD'?3:2,dia);
+  
+  // 1. Mensual (F103, F104, ATS): Vence al mes siguiente
+  if(t==='M'){
+    const [y,m]=k.split('-').map(Number);
+    return new Date(y,m,dia);
+  }
+  
+  // 2. Semestral (F104 Semestral): 
+  // 1.er Semestre (Ene-Jun) vence en JULIO del mismo año
+  // 2.º Semestre (Jul-Dic) vence en ENERO del año siguiente
+  if(t==='S'){
+    const [y,s]=k.split('-S');
+    return s==='1' ? new Date(+y, 6, dia) : new Date(+y+1, 0, dia);
+  }
+  
+  // 3. Anual (Impuesto a la Renta, RDEP, AGP - Año Caído):
+  // Persona Natural vence en MARZO del año siguiente
+  // Sociedad vence en ABRIL del año siguiente
+  if(t==='A'){
+    const y=+k;
+    const mesVencimiento = c.tipo==='SOCIEDAD' ? 3 : 2; // Marzo (2) o Abril (3)
+    return new Date(y+1, mesVencimiento, dia);
+  }
+  
+  return new Date();
 }
+
 function daysTo(d){return Math.round((d-midnight())/864e5)}
 
 /* ---- cálculos ---- */
@@ -297,7 +320,7 @@ const Store={
   saveLocal(){try{localStorage.setItem('bitacora_v1',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]]))))}catch(e){}},
   async put(col,id,data){
     data=clean(data);S[col][id]=data;render();
-    if(this.db){try{await this.db.doc(col+'/'+id).set(data)}catch(e){toast('No se pudo guardar (¿permiso de escritura?)');console.error(e)}}
+    if(this.db){try{await this.db.doc(col+'/'+id).set(data)}catch(e){toast('No se pudo guardar');console.error(e)}}
     else this.saveLocal();
   },
   async del(col,id){
@@ -542,7 +565,6 @@ function vClientes(){
   </div>`;
 }
 
-
 /* ---- GRUPOS Y REFERIDOS ---- */
 function vGrupos(){
   const L=activos();
@@ -773,8 +795,7 @@ function savePago(id){
   if(cobroCalc(x).est==='pagado')setTimeout(()=>modalRecibo(id),250);
 }
 
-
-/* ---- PAGO DE VARIOS MESES (un solo depósito) ---- */
+/* ---- PAGO DE VARIOS MESES ---- */
 let MP=null;
 const r2=n=>Math.round(n*100)/100;
 const pendDe=cid=>cobrosList().filter(x=>x.clienteId===cid&&!x.anulado&&cobroCalc(x).saldo>0).sort((a,b)=>(a.periodo||'').localeCompare(b.periodo||'')||(a.fechaEmision||'').localeCompare(b.fechaEmision||''));
@@ -1061,7 +1082,6 @@ async function vDoChange(){
   }catch(e){toast('Se interrumpió: no cierres la app y vuelve a intentarlo');console.error(e)}
 }
 
-
 /* ============ CLAVE GENERAL DE ACCESO ============ */
 const GATE={need:false,timer:null,fails:0,wait:0};
 function lsOK(){try{localStorage.setItem('__t','1');localStorage.removeItem('__t');return true}catch(e){return false}}
@@ -1152,7 +1172,7 @@ const ACT={
   ayShift:d=>{UI.ay+=+d.dir;render()},
   verGrupo:d=>{UI.tab='clientes';UI.cgrp=d.g;UI.clq='';UI.clver='activos';render();window.scrollTo(0,0)},
   obGrupo:d=>{UI.tab='control';UI.fgr=d.g;UI.q='';UI.solo=false;render();window.scrollTo(0,0)},
-  suspender:d=>{const c=clean(S.clientes[d.id]);c.activo=false;c.suspFecha=todayStr();Store.put('clientes',d.id,c);toast('Cliente suspendido. Su historial se conserva; puedes reactivarlo cuando quieras')},
+  suspender:d=>{const c=clean(S.clientes[d.id]);c.activo=false;c.suspFecha=todayStr();Store.put('clientes',d.id,c);toast('Cliente suspendido')},
   reactivar:d=>{const c=clean(S.clientes[d.id]);c.activo=true;delete c.suspFecha;Store.put('clientes',d.id,c);toast('Cliente reactivado')},
   ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
   toggle:d=>{
@@ -1174,7 +1194,7 @@ const ACT={
     if(p1.length<8){toast('Usa al menos 8 caracteres');return}
     if(p1!==p2){toast('Las claves no coinciden');return}
     const salt=b64(crypto.getRandomValues(new Uint8Array(16))),iter=310000;
-    try{localStorage.setItem('bitacora_gate',JSON.stringify({salt,iter,hash:await gateHash(p1,salt,iter),creada:todayStr()}))}catch(e){toast('No se pudo guardar la clave en este navegador');return}
+    try{localStorage.setItem('bitacora_gate',JSON.stringify({salt,iter,hash:await gateHash(p1,salt,iter),creada:todayStr()}))}catch(e){toast('No se pudo guardar la clave');return}
     gateOpen();toast('Clave de acceso creada');
   },
   gateLogin:async()=>{
@@ -1226,7 +1246,7 @@ const ACT={
   editCliente:d=>modalCliente(d.id),
   saveCliente:d=>saveCliente(d.id||null),
   delCliente:d=>{
-    if(cobrosList().some(x=>x.clienteId===d.id)){toast('Tiene cobros registrados: mejor suspéndelo (botón Suspender) para conservar su historial');return}
+    if(cobrosList().some(x=>x.clienteId===d.id)){toast('Tiene cobros registrados: mejor suspéndelo');return}
     Store.del('clientes',d.id);closeModal();toast('Cliente eliminado');
   },
   importar:async()=>{
