@@ -114,6 +114,33 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
   .receipt{position:absolute;left:0;top:0;width:100%;border:0}
 }
 </style>
+<!-- Conexión a Firebase Firestore para sincronización en la nube -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
+    authDomain: "bitacora-cobros.firebaseapp.com",
+    projectId: "bitacora-cobros",
+    storageBucket: "bitacora-cobros.firebasestorage.app",
+    messagingSenderId: "465013215619",
+    appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
+  };
+
+  // Inicializar Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // Activar detección para la bitácora
+  window.claude = {
+    use: async (service) => {
+      if (service === 'db') return db;
+      return null;
+    }
+  };
+</script>
+
 </head>
 <body>
 <div class="wrap">
