@@ -160,10 +160,19 @@ const SEED = [];
 /* ============ CONSTANTES ============ */
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const OBL=[
-  {k:'F103_104',n:'F103 + F104',f:'P'},{k:'F104_SEM',n:'F104 semestral',f:'S'},{k:'ATS',n:'ATS',f:'P'},
-  {k:'IM_RTA',n:'Imp. Renta',f:'A'},{k:'RDEP',n:'RDEP',f:'A'},{k:'AGP',n:'AGP',f:'A'},{k:'APS',n:'APS',f:'A'},
-  {k:'ADI',n:'ADI',f:'A'},{k:'D_PATRIM',n:'D. Patrimonial',f:'A'},{k:'SUPERCIAS',n:'Supercias',f:'A'},
-  {k:'S13',n:'13.º sueldo',f:'A'},{k:'S14',n:'14.º sueldo',f:'A'}
+  {k:'F103_104',n:'F103 + F104',f:'P'},
+  {k:'F104_SEM',n:'F104 semestral',f:'S'},
+  {k:'ATS',n:'ATS',f:'P'},
+  {k:'RDEP',n:'RDEP',f:'A'},
+  {k:'AGP',n:'AGP',f:'A'},
+  {k:'APS',n:'APS',f:'A'},
+  {k:'IM_RTA',n:'Imp. Renta',f:'A'},
+  {k:'SUPERCIAS',n:'Supercias',f:'A'},
+  {k:'ADI',n:'ADI',f:'A'},
+  {k:'D_PATRIM',n:'D. Patrimonial',f:'A'},
+  {k:'PM',n:'Patente Municipal',f:'A'},
+  {k:'S14',n:'14.º sueldo',f:'A'},
+  {k:'S13',n:'13.er sueldo',f:'A'}
 ];
 const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 const FORMAS=['Efectivo','Transferencia','Depósito','Cheque','Otro'];
@@ -216,33 +225,79 @@ function defaultPeriod(t){
 }
 function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
 
-/* ---- CÁLCULO DE VENCIMIENTOS SRI ECUADOR ---- */
-function dueDate(c,k){
-  const dia=DIA_POR_DIGITO[digito9(c.ruc)]||28,t=ptype(k);
-  
-  // 1. Mensual (F103, F104, ATS): Vence al mes siguiente
-  if(t==='M'){
-    const [y,m]=k.split('-').map(Number);
-    return new Date(y,m,dia);
+/* ---- CÁLCULO DE VENCIMIENTOS REGULATORIOS (SRI / SUPERCIAS / MDT / MUNICIPIOS) ---- */
+function dueDate(c, k, oblKey) {
+  const digito = digito9(c.ruc);
+  const dia = DIA_POR_DIGITO[digito] || 28;
+  const t = ptype(k);
+
+  // 1. OBLIGACIONES MENSUALES
+  if (t === 'M') {
+    const [y, m] = k.split('-').map(Number);
+    return new Date(y, m, dia); // Mes siguiente
   }
-  
-  // 2. Semestral (F104 Semestral): 
-  // 1.er Semestre (Ene-Jun) vence en JULIO del mismo año
-  // 2.º Semestre (Jul-Dic) vence en ENERO del año siguiente
-  if(t==='S'){
-    const [y,s]=k.split('-S');
-    return s==='1' ? new Date(+y, 6, dia) : new Date(+y+1, 0, dia);
+
+  // 2. OBLIGACIONES SEMESTRALES
+  if (t === 'S') {
+    const [y, s] = k.split('-S');
+    return s === '1' ? new Date(+y, 6, dia) : new Date(+y + 1, 0, dia);
   }
-  
-  // 3. Anual (Impuesto a la Renta, RDEP, AGP - Año Caído):
-  // Persona Natural vence en MARZO del año siguiente
-  // Sociedad vence en ABRIL del año siguiente
-  if(t==='A'){
-    const y=+k;
-    const mesVencimiento = c.tipo==='SOCIEDAD' ? 3 : 2; // Marzo (2) o Abril (3)
-    return new Date(y+1, mesVencimiento, dia);
+
+  // 3. OBLIGACIONES ANUALES
+  if (t === 'A') {
+    const y = +k; // Año fiscal
+    let mes = 2; // Por defecto Marzo (0-indexed: Ene=0, Feb=1, Mar=2, Abr=3, May=4, Jun=5, Jul=6, Ago=7, Dic=11)
+    let diaEspecifico = dia;
+
+    switch (oblKey) {
+      case 'RDEP':
+        mes = 0; // ENERO
+        break;
+
+      case 'AGP':
+      case 'APS':
+        mes = 1; // FEBRERO
+        break;
+
+      case 'IM_RTA':
+        mes = c.tipo === 'SOCIEDAD' ? 3 : 2; // SOCIEDAD: ABRIL, NATURAL: MARZO
+        break;
+
+      case 'SUPERCIAS':
+        mes = 3; // ABRIL
+        diaEspecifico = 30; // Fin de mes de Abril
+        break;
+
+      case 'ADI':
+      case 'D_PATRIM':
+        mes = 4; // MAYO
+        break;
+
+      case 'PM': // PATENTE MUNICIPAL
+        if (c.tipo === 'SOCIEDAD' || c.contabilidad) {
+          mes = 5; // JUNIO (Sociedades y Obligados)
+        } else {
+          mes = 6; // JULIO (No obligados)
+        }
+        break;
+
+      case 'S14':
+        mes = 7; // AGOSTO
+        diaEspecifico = 31;
+        break;
+
+      case 'S13':
+        mes = 11; // DICIEMBRE
+        diaEspecifico = 24;
+        break;
+
+      default:
+        mes = 2; // Por defecto Marzo
+    }
+
+    return new Date(y + 1, mes, diaEspecifico);
   }
-  
+
   return new Date();
 }
 
@@ -269,15 +324,24 @@ function aplica(c,k){
   if(t==='S'){const [y,s]=k.split('-S');return y+'-'+(s==='1'?'06':'12')>=d}
   return k+'-12'>=d;
 }
-function oblFor(c,t){return OBL.filter(o=>c.obl&&c.obl[o.k]&&(o.f==='P'?PERCODE[c.periodicidad]===t:o.f===t))}
+function oblFor(c,t){
+  return OBL.filter(o=>{
+    if(!c.obl||!c.obl[o.k])return false;
+    if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false; // Exclusivo Sociedades
+    return o.f==='P'?PERCODE[c.periodicidad]===t:o.f===t;
+  });
+}
 function avanceOf(cid,k){return S.avances[cid+'__'+k]||{done:{}}}
 function rowsFor(t,k){
   return activos().map(c=>{
     if(!aplica(c,k))return null;
     const items=oblFor(c,t);if(!items.length)return null;
     const av=avanceOf(c.id,k),done=items.filter(o=>av.done&&av.done[o.k]).length;
-    const due=dueDate(c,k),dd=daysTo(due);
-    return {c,items,av,done,total:items.length,due,dd,complete:done===items.length,overdue:dd<0&&done<items.length};
+    // Calcular el vencimiento más cercano de las obligaciones del cliente en este período
+    const dues=items.map(o=>dueDate(c,k,o.k));
+    const minDue=new Date(Math.min(...dues));
+    const dd=daysTo(minDue);
+    return {c,items,av,done,total:items.length,due:minDue,dd,complete:done===items.length,overdue:dd<0&&done<items.length};
   }).filter(Boolean);
 }
 function cobroCalc(x){
@@ -413,7 +477,7 @@ function vControl(){
     <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="solo" ${UI.solo?'checked':''}> Solo pendientes</label>
   </div>
   <div class="card">
-    <div class="sm" style="margin-bottom:8px">${all.filter(r=>r.complete).length} de ${all.length} clientes completos · la fecha de vencimiento se calcula con el 9.º dígito del RUC y solo se cuentan los períodos desde la fecha “Cliente desde” de cada uno. Toca una obligación para marcarla como presentada.</div>
+    <div class="sm" style="margin-bottom:8px">${all.filter(r=>r.complete).length} de ${all.length} clientes completos · la fecha de vencimiento se calcula con el 9.º dígito del RUC y el calendario específico de cada entidad (SRI, MDT, Supercias, Municipio). Toca una obligación para marcarla como presentada.</div>
     ${rows.length?`<div class="tablewrap"><table>
       <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th><th>Cobro</th></tr></thead>
       <tbody>${rows.map(r=>{
@@ -426,7 +490,7 @@ function vControl(){
         return `<tr>
           <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)} · ${esc(r.c.regimen)}</div>${tagsCli(r.c)?`<div style="margin-top:3px">${tagsCli(r.c)}</div>`:''}${pagaOtro}</td>
           <td>${dueChip(r)}</td>
-          <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}
+          <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}" title="Vence: ${fmtD(dueDate(r.c,k,o.k))}">${o.n}</button>`).join('')}
             ${r.complete?'':`<button class="ob" data-a="todo" data-c="${r.c.id}" data-k="${k}" title="Marcar todas">✓ todo</button>`}</div></td>
           <td>${cobTd}</td></tr>`}).join('')}
       </tbody></table></div>`:`<div class="empty">No hay clientes con obligaciones ${TIPOLBL[t].toLowerCase()}s en esta vista.</div>`}
@@ -437,7 +501,10 @@ function vControl(){
 function cellInfo(c,t,k){
   if(!aplica(c,k))return {s:'na'};
   const items=oblFor(c,t);if(!items.length)return {s:'na'};
-  const av=avanceOf(c.id,k),done=items.filter(o=>av.done&&av.done[o.k]).length,dd=daysTo(dueDate(c,k));
+  const av=avanceOf(c.id,k),done=items.filter(o=>av.done&&av.done[o.k]).length;
+  const dues=items.map(o=>dueDate(c,k,o.k));
+  const minDue=new Date(Math.min(...dues));
+  const dd=daysTo(minDue);
   const s=done===items.length?'ok':dd<0?'bad':done>0?'part':'pend';
   return {s,done,total:items.length,dd,t,k};
 }
@@ -1032,7 +1099,10 @@ function modalShow(cid,iid){
 }
 function modalAn(cid,t,k){
   const c=S.clientes[cid],items=oblFor(c,t),av=avanceOf(cid,k);
-  const done=items.filter(o=>av.done&&av.done[o.k]).length,dd=daysTo(dueDate(c,k));
+  const done=items.filter(o=>av.done&&av.done[o.k]).length;
+  const dues=items.map(o=>dueDate(c,k,o.k));
+  const minDue=new Date(Math.min(...dues));
+  const dd=daysTo(minDue);
   openModal(`<h2>${esc(c.nombre)} · ${plabel(k)}</h2>
   <p class="sm">${done===items.length?'Todo cumplido':dd<0?'Vencido hace '+(-dd)+' días':'Vence en '+dd+' días'} · toca cada obligación para marcarla o desmarcarla.</p>
   <div class="obs" style="margin:10px 0">${items.map(o=>`<button class="ob ${av.done&&av.done[o.k]?'done':''}" data-a="anOb" data-c="${cid}" data-t="${t}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div>
