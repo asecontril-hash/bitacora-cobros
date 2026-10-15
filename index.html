@@ -889,3 +889,171 @@ function autofillCobro(){
   document.getElementById('c_doc').value=c.doc||'recibo';
   document.getElementById('c_con').value='Honorarios '+plabel(k);
 }
+function saveCobro(id){
+  const cid=val('c_cli');if(!cid){toast('Elige un cliente');return}
+  const monto=+val('c_mon');if(!(monto>0)){toast('Ingresa un monto');return}
+  const prev=id?S.cobros[id]:{abonos:[]};
+  const x={...prev,clienteId:cid,periodo:val('c_per'),concepto:val('c_con').trim(),monto,tipoDoc:val('c_doc'),numDoc:val('c_num').trim(),fechaEmision:val('c_fec')||todayStr(),nota:val('c_nota').trim(),abonos:prev.abonos||[]};
+  if(x.tipoDoc==='recibo'&&!x.numDoc)x.numDoc=nextRecibo();
+  Store.put('cobros',id||uid(),x);closeModal();toast('Cobro guardado');
+}
+
+function modalGenerar(){
+  const opts=periodOptions('M');
+  openModal(`<h2>Generar cobros</h2>
+  <div class="fgrid"><div class="full"><label>Mes a facturar<select id="g_mes" data-f="g_mes">${opts.map(k=>`<option value="${k}">${plabel(k)}</option>`).join('')}</select></label></div></div>
+  <div id="g_list"></div>
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="crearGenerados">Crear seleccionados</button></div>`,true);
+  listGenerar();
+}
+function candidatos(mk){
+  const [y,m]=mk.split('-').map(Number);
+  return activos().filter(c=>c.cobra&&c.tarifa>0).map(c=>{
+    const k=c.cobroFreq==='S'?semOfMonth(y,m):c.cobroFreq==='A'?String(y):mk;
+    return {c,k};
+  }).filter(r=>aplica(r.c,r.k)&&!cobroDe(r.c.id,r.k));
+}
+function listGenerar(){
+  const mk=val('g_mes'),L=candidatos(mk);
+  $('#g_list').innerHTML=L.length?`<div class="tablewrap"><table style="min-width:0"><tbody>${L.map((r,i)=>`<tr><td><input type="checkbox" class="g_chk" data-i="${i}" checked></td><td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${plabel(r.k)}</div></td><td class="r">${money(r.c.tarifa)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros por generar.</div>';
+}
+async function crearGenerados(){
+  const L=candidatos(val('g_mes')),picks=[...document.querySelectorAll('.g_chk')].filter(e=>e.checked).map(e=>L[+e.dataset.i]);
+  if(!picks.length){toast('Nada seleccionado');return}
+  closeModal();let n=0;
+  for(const r of picks){
+    const x={clienteId:r.c.id,periodo:r.k,concepto:'Honorarios '+plabel(r.k),monto:r.c.tarifa,tipoDoc:r.c.doc||'recibo',numDoc:'',fechaEmision:todayStr(),abonos:[],nota:''};
+    if(x.tipoDoc==='recibo')x.numDoc=nextRecibo();
+    await Store.put('cobros',uid(),x);n++;
+  }
+  toast(n+' cobros creados');
+}
+
+function modalPago(id){
+  const x=S.cobros[id],c=S.clientes[x.clienteId]||{nombre:'—'},k=cobroCalc(x);
+  openModal(`<h2>Registrar cobro</h2>
+  <p><b>${esc(c.nombre)}</b> · Saldo: ${money(k.saldo)}</p>
+  <div class="fgrid">
+    <div><label>Fecha<input id="p_fec" type="date" value="${todayStr()}"></label></div>
+    <div><label>Monto recibido<input id="p_mon" type="number" min="0" step="0.01" value="${k.saldo}"></label></div>
+    <div><label>Forma<select id="p_for">${FORMAS.map(f=>`<option>${f}</option>`).join('')}</select></label></div>
+    <div><label>Referencia<input id="p_ref"></label></div>
+  </div>
+  <div class="actions"><button class="btn" data-a="close">Cerrar</button><button class="btn pri" data-a="savePago" data-id="${id}">Registrar</button></div>`);
+}
+function savePago(id){
+  const m=+val('p_mon');if(!(m>0)){toast('Ingresa el monto');return}
+  const x=clean(S.cobros[id]);x.abonos=x.abonos||[];
+  x.abonos.push({f:val('p_fec')||todayStr(),m,forma:val('p_for'),ref:val('p_ref').trim()});
+  Store.put('cobros',id,x);closeModal();toast('Pago registrado');
+}
+
+/* ============ BÓVEDA CIFRADA (AES-256-GCM + PBKDF2) ============ */
+const VAULT={key:null,data:{},timer:null,busy:false};
+const _enc=new TextEncoder(),_dec=new TextDecoder();
+const b64=buf=>{let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const cryptoOK=()=>!!(window.crypto&&window.crypto.subtle);
+async function deriveKey(pass,salt,iter){
+  const km=await crypto.subtle.importKey('raw',_enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iter,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function encJSON(key,obj){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,_enc.encode(JSON.stringify(obj)));
+  return {iv:b64(iv),ct:b64(ct)};
+}
+async function decJSON(key,d){
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},key,unb64(d.ct));
+  return JSON.parse(_dec.decode(pt));
+}
+function vTouch(){
+  clearTimeout(VAULT.timer);
+  if(VAULT.key)VAULT.timer=setTimeout(()=>{lockVault();toast('Bóveda bloqueada por inactividad')},5*60*1000);
+}
+function lockVault(silent){
+  VAULT.key=null;VAULT.data={};clearTimeout(VAULT.timer);
+  if(/vault/.test(($('#modal').firstChild||{}).className||'')||document.getElementById('v_sens'))closeModal();
+  if(!silent)render();
+}
+function vClaves(){
+  if(!cryptoOK())return `<div class="card"><b>Cifrado no disponible</b></div>`;
+  const meta=S.boveda.meta;
+  if(!meta)return `<div class="card" style="max-width:560px"><b>🔒 Crear bóveda de claves</b>
+    <div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password"></label></div>
+    <div class="full"><label>Repite la clave<input id="v_pass2" type="password"></label></div></div>
+    <div class="actions"><button class="btn pri" data-a="vSetup">Crear bóveda</button></div></div>`;
+  if(!VAULT.key)return `<div class="card" style="max-width:480px"><b>🔒 Bóveda bloqueada</b>
+    <div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password"></label></div></div>
+    <div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>`;
+  return `<div class="card"><b>🔒 Bóveda activada</b><p class="sm">Tus claves están seguras y cifradas en la nube.</p></div>`;
+}
+
+/* ============ ACCIONES ============ */
+const ACT={
+  tab:d=>{UI.tab=d.k;render()},
+  vSetup:async()=>{
+    const p=val('v_pass'),p2=val('v_pass2');
+    if(p.length<12||p!==p2){toast('Revisa la clave maestra (mín 12 caracteres)');return}
+    const salt=crypto.getRandomValues(new Uint8Array(16)),iter=600000,key=await deriveKey(p,salt,iter);
+    await Store.put('boveda','meta',{salt:b64(salt),iter,check:await encJSON(key,{ok:'BITACORA'}),creado:todayStr()});
+    VAULT.key=key;render();toast('Bóveda creada');
+  },
+  vUnlock:async()=>{
+    const p=val('v_pass'),m=S.boveda.meta;
+    try{
+      const key=await deriveKey(p,unb64(m.salt),m.iter);
+      const ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
+      VAULT.key=key;render();toast('Desbloqueada');
+    }catch(e){toast('Clave incorrecta')}
+  },
+  close:()=>closeModal(),
+  bgclose:(d,e)=>{if(e.target.classList.contains('bg'))closeModal()},
+  shift:d=>{const o=periodOptions(UI.ctype),i=o.indexOf(UI.cper)-(+d.dir);if(i>=0&&i<o.length){UI.cper=o[i];render()}},
+  ayShift:d=>{UI.ay+=+d.dir;render()},
+  ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
+  toggle:d=>{
+    const id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
+    if(av.done[d.o])delete av.done[d.o];else av.done[d.o]=true;
+    Store.put('avances',id,av);
+  },
+  todo:d=>{
+    const c=S.clientes[d.c],t=ptype(d.k),id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
+    oblFor(c,t).forEach(o=>{av.done[o.k]=true});
+    Store.put('avances',id,av);
+  },
+  anCellDist:d=>modalAnDist(d.c, +d.y, +d.m),
+  nuevaObl:()=>modalObl(null),
+  editObl:d=>modalObl(d.k),
+  delObl:d=>{ Store.del('catObl', d.k); toast('Obligación eliminada'); },
+  saveObl:d=>saveObl(d.k),
+  nuevoCliente:()=>modalCliente(null),
+  editCliente:d=>modalCliente(d.id),
+  saveCliente:d=>saveCliente(d.id||null),
+  delCliente:d=>{ Store.del('clientes',d.id);closeModal();toast('Cliente eliminado'); },
+  nuevoCobro:()=>modalCobro(null),
+  saveCobro:d=>saveCobro(d.id||null),
+  pagar:d=>modalPago(d.id),
+  savePago:d=>savePago(d.id),
+  guardarCfg:()=>{Store.put('config','main',{nombre:val('cfg_nombre').trim(),ruc:val('cfg_ruc').trim(),tel:val('cfg_tel').trim(),ciudad:val('cfg_ciudad').trim(),mail:val('cfg_mail').trim(),nota:val('cfg_nota').trim()});toast('Ajustes guardados')},
+  respaldo:()=>saveFile('respaldo_bitacora_'+todayStr()+'.json',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]])),null,1))
+};
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]');if(!b)return;
+  const fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e);
+});
+document.addEventListener('change',e=>{
+  const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
+  if(f==='cper'){UI.cper=t.value;render()}
+  else if(f==='ay'){UI.ay=+t.value;render()}
+  else if(f==='asolo'){UI.asolo=t.checked;render()}
+  else if(f==='solo'){UI.solo=t.checked;render()}
+  else if(f==='ord'){UI.ord[t.dataset.s]=t.value;render()}
+});
+
+UI.cper=defaultPeriod('M');
+Store.init();
+</script>
+</body>
+</html>
