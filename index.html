@@ -121,7 +121,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
   } catch(e) {
-    console.warn("Firebase offline:", e);
+    console.warn("Firebase no conectado:", e);
   }
 
   window.claude = {
@@ -147,7 +147,6 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <div id="print-area"></div>
 
 <script>
-/* ============ CONSTANTES FISCALES Y CATÁLOGO ============ */
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 const DEFAULT_OBL=[
@@ -162,7 +161,7 @@ const DEFAULT_OBL=[
   {k:'ADI',n:'ADI',f:'A',m:5,d:'RUC'},
   {k:'D_PATRIM',n:'D. Patrimonial',f:'A',m:5,d:'RUC'},
   {k:'PM',n:'Patente Municipal',f:'A',m:6,d:'RUC'},
-  {k:'S14',n:'14.º sueldo',f:'A',m:8,d:31},
+  {k:'S14',n:'14.o sueldo',f:'A',m:8,d:31},
   {k:'S13',n:'13.er sueldo',f:'A',m:12,d:24}
 ];
 
@@ -170,11 +169,9 @@ const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 const PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
 const TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-/* ============ ACCESO Y GATE DE CONTRASEÑA ============ */
 const GATE={logged:false};
 function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
 
-/* ============ ESTADO Y VARIABLES ============ */
 const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
 const loaded={};
 const now=new Date();
@@ -194,7 +191,6 @@ function getOblList(){
   return custom.length > 0 ? custom : DEFAULT_OBL;
 }
 
-/* ============ UTILIDADES ============ */
 const $=s=>document.querySelector(s);
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
 const pad=n=>String(n).padStart(2,'0');
@@ -212,7 +208,7 @@ function ptype(k){return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A
 function plabel(k){
   const t=ptype(k);
   if(t==='M'){const [y,m]=k.split('-');return MESES[+m-1][0].toUpperCase()+MESES[+m-1].slice(1)+' '+y}
-  if(t==='S'){const [y,s]=k.split('-');return (s==='S1'?'1.er semestre ':'2.º semestre ')+y}
+  if(t==='S'){const [y,s]=k.split('-');return (s==='S1'?'1.er semestre ':'2.o semestre ')+y}
   return 'Año '+k;
 }
 function monthKey(y,m){return y+'-'+pad(m)}
@@ -292,11 +288,11 @@ const matchesQ=(c, qTerm)=>{
 
 const clientesList=()=>Object.entries(S.clientes).map(([id,c])=>({...c,id})).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
 const gruposList=()=>[...new Set(clientesList().map(c=>(c.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'')+(c.cobra===false?`<span class="chip mut">Gratuito</span> `:`<span class="chip ok">$${c.tarifa||0}</span> `)+(c.doc==='factura'?`<span class="chip info">Factura</span>`:`<span class="chip mut">Recibo</span>`);
+const tagsCli=c=>(c.activo===false?'<span class="chip warn">⏸ Suspendido</span> ':'')+(c.grupo?'<span class="chip info">🏢 '+esc(c.grupo)+'</span> ':'')+(c.cobra===false?'<span class="chip mut">Gratuito</span> ':'<span class="chip ok">$'+(c.tarifa||0)+'</span> ')+(c.doc==='factura'?'<span class="chip info">Factura</span>':'<span class="chip mut">Recibo</span>');
 const inGrp=c=>UI.fgr==='todos'||(UI.fgr==='__sin'?!(c.grupo||'').trim():(c.grupo||'').trim()===UI.fgr);
-const grpSelect=()=>`<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.fgr==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.fgr===g?'selected':''}>🏢 ${esc(g)}</option>`).join('')}</select>`;
+const grpSelect=()=>'<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" '+(UI.fgr==='__sin'?'selected':'')+'>Sin grupo</option>'+gruposList().map(g=>'<option value="'+esc(g)+'" '+(UI.fgr===g?'selected':'')+'>🏢 '+esc(g)+'</option>').join('')+'</select>';
 
-const searchInput=(fieldKey, valStr)=>`<input type="text" id="src_${fieldKey}" placeholder="🔍 Buscar cliente o RUC…" value="${esc(valStr)}" data-f="${fieldKey}" style="min-width:200px">`;
+const searchInput=(fieldKey, valStr)=>'<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente o RUC…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">';
 
 const activos=()=>clientesList().filter(c=>c.activo!==false);
 const cobrosList=()=>Object.entries(S.cobros).map(([id,c])=>({...c,id}));
@@ -353,7 +349,7 @@ const Store={
         S.ready=true;
         render();
       }
-    }, 1500);
+    }, 1000);
 
     if(db){
       this.db=db;S.kind='nube';
@@ -430,18 +426,18 @@ function render(){
 
   if(cfgPass && !GATE.logged){
     $('#tabs').innerHTML=''; $('#stat').textContent='';
-    $('#main').innerHTML=`<div class="card" style="max-width:380px;margin:50px auto;text-align:center">
-      <h2 style="margin-bottom:8px">🔒 Acceso a Bitácora</h2>
-      <p class="sm" style="margin-bottom:16px">Ingresa tu contraseña de inicio:</p>
-      <input type="password" id="g_pass_input" placeholder="Contraseña de acceso" style="width:100%;margin-bottom:12px" onkeydown="if(event.key==='Enter')ACT.loginGate()">
-      <button class="btn pri" data-a="loginGate" style="width:100%">Desbloquear e ingresar</button>
-    </div>`;
+    $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
+      '<h2 style="margin-bottom:8px">🔒 Acceso a Bitácora</h2>'+
+      '<p class="sm" style="margin-bottom:16px">Ingresa tu contraseña de inicio:</p>'+
+      '<input type="password" id="g_pass_input" placeholder="Contraseña de acceso" style="width:100%;margin-bottom:12px" onkeydown="if(event.key===\'Enter\')ACT.loginGate()">'+
+      '<button class="btn pri" data-a="loginGate" style="width:100%">Desbloquear e ingresar</button>'+
+    '</div>';
     return;
   }
 
   if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return}
   $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':'Modo local';
-  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${UI.tab===k?'on':''}" data-a="tab" data-k="${k}">${l}</button>`).join('');
+  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button class="'+(UI.tab===k?'on':'')+'" data-a="tab" data-k="'+k+'">'+l+'</button>').join('');
   const v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
 }
@@ -454,16 +450,15 @@ function vPanel(){
   const mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
   const cobMes=cs.reduce((s,r)=>s+(r.x.abonos||[]).filter(a=>(a.f||'').startsWith(mesStr)).reduce((t,a)=>t+(+a.m||0),0),0);
   const urg=rows.filter(r=>!r.complete).slice(0,10);
-  return `
-  <div class="grid kpis">
-    <div class="card kpi ${venc?'bad':'ok'}"><div class="n">${venc}</div><div class="l">Declaraciones vencidas · ${plabel(k)}</div></div>
-    <div class="card kpi"><div class="n">${comp}/${rows.length}</div><div class="l">Clientes completos</div></div>
-    <div class="card kpi ${porCobrar?'warn':'ok'}"><div class="n">${money(porCobrar)}</div><div class="l">Por cobrar</div></div>
-    <div class="card kpi ok"><div class="n">${money(cobMes)}</div><div class="l">Cobrado este mes</div></div>
-  </div>
-  <div class="card"><b>Pendientes próximos · ${plabel(k)}</b>
-    ${urg.length?`<div class="tablewrap"><table><tbody>${urg.map(r=>`<tr><td><div class="nm">${esc(r.c.nombre)}</div></td><td>${dueChip(r)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Todo al día 🎉</div>'}
-  </div>`;
+  return '<div class="grid kpis">'+
+    '<div class="card kpi '+(venc?'bad':'ok')+'"><div class="n">'+venc+'</div><div class="l">Declaraciones vencidas · '+plabel(k)+'</div></div>'+
+    '<div class="card kpi"><div class="n">'+comp+'/'+rows.length+'</div><div class="l">Clientes completos</div></div>'+
+    '<div class="card kpi '+(porCobrar?'warn':'ok')+'"><div class="n">'+money(porCobrar)+'</div><div class="l">Por cobrar</div></div>'+
+    '<div class="card kpi ok"><div class="n">'+money(cobMes)+'</div><div class="l">Cobrado este mes</div></div>'+
+  '</div>'+
+  '<div class="card"><b>Pendientes próximos · '+plabel(k)+'</b>'+
+    (urg.length?'<div class="tablewrap"><table><tbody>'+urg.map(r=>'<tr><td><div class="nm">'+esc(r.c.nombre)+'</div></td><td>'+dueChip(r)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">Todo al día 🎉</div>')+
+  '</div>';
 }
 
 function vControl(){
@@ -474,36 +469,30 @@ function vControl(){
   const porVencer = allRows.filter(r => !r.overdue);
   const opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
-  const renderTable = (list) => `<div class="tablewrap"><table>
-    <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>
-    <tbody>${list.map(r=>`<tr>
-      <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
-      <td>${dueChip(r)}</td>
-      <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div></td>
-    </tr>`).join('')}</tbody></table></div>`;
+  const renderTable = (list) => '<div class="tablewrap"><table>'+
+    '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>'+
+    '<tbody>'+list.map(r=>'<tr>'+
+      '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
+      '<td>'+dueChip(r)+'</td>'+
+      '<td><div class="obs">'+r.items.map(o=>'<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div></td>'+
+    '</tr>').join('')+'</tbody></table></div>';
 
-  return `
-  <div class="bar">
-    <div class="seg">${['M','S','A'].map(x=>`<button class="${t===x?'on':''}" data-a="ctype" data-k="${x}">${TIPOLBL[x]}</button>`).join('')}</div>
-    <select data-f="cper">${opts.map(o=>`<option value="${o}" ${o===k?'selected':''}>${plabel(o)}</option>`).join('')}</select>
-    ${grpSelect()}
-    ${searchInput('q_ctrl', UI.q_ctrl)}
-  </div>
-  
-  ${vencidos.length ? `<div class="card" style="border-left:4px solid var(--bad)">
-    <b style="color:var(--bad)">🚨 Declaraciones Vencidas (${vencidos.length})</b>${renderTable(vencidos)}
-  </div>` : ''}
-
-  <div class="card" style="border-left:4px solid var(--pri)">
-    <b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo (${porVencer.length})</b>
-    ${porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes para este período.</div>'}
-  </div>`;
+  return '<div class="bar">'+
+    '<div class="seg">'+['M','S','A'].map(x=>'<button class="'+(t===x?'on':'')+'" data-a="ctype" data-k="'+x+'">'+TIPOLBL[x]+'</button>').join('')+'</div>'+
+    '<select data-f="cper">'+opts.map(o=>'<option value="'+o+'" '+(o===k?'selected':'')+'>'+plabel(o)+'</option>').join('')+'</select>'+
+    grpSelect()+
+    searchInput('q_ctrl', UI.q_ctrl)+
+  '</div>'+
+  (vencidos.length ? '<div class="card" style="border-left:4px solid var(--bad)"><b style="color:var(--bad)">🚨 Declaraciones Vencidas ('+vencidos.length+')</b>'+renderTable(vencidos)+'</div>' : '')+
+  '<div class="card" style="border-left:4px solid var(--pri)"><b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo ('+porVencer.length+')</b>'+
+    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes para este período.</div>')+
+  '</div>';
 }
 
 function dueChip(r){
   if(r.complete)return '<span class="chip ok">Completo</span>';
-  if(r.dd<0)return `<span class="chip bad">Vencido hace ${-r.dd} d · ${fmtD(r.due)}</span>`;
-  return `<span class="chip ${r.dd<=7?'warn':'info'}">Vence en ${r.dd} d · ${fmtD(r.due)}</span>`;
+  if(r.dd<0)return '<span class="chip bad">Vencido hace '+(-r.dd)+' d · '+fmtD(r.due)+'</span>';
+  return '<span class="chip '+(r.dd<=7?'warn':'info')+'">Vence en '+r.dd+' d · '+fmtD(r.due)+'</span>';
 }
 
 function cellInfoAnual(c, y, mNum) {
@@ -556,161 +545,156 @@ function vAnual(){
     return {c,cells,tot:act.length,ok:act.filter(x=>x.s==='ok').length,bad:act.filter(x=>x.s==='bad').length,pend:act.filter(x=>x.s!=='ok'&&x.s!=='na').length};
   }).filter(r=>r.tot>0);
 
-  return `
-  <div class="bar">
-    <button class="btn" data-a="ayShift" data-dir="-1" ${y<=2026?'disabled':''}>◀</button>
-    <b>Año ${y}</b>
-    <button class="btn" data-a="ayShift" data-dir="1">▶</button>
-    ${grpSelect()}
-    ${searchInput('q_anual', UI.q_anual)}
-  </div>
-  <div class="card">
-    <div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">vencido</span> · <span class="cl pend">·</span> pendiente.</div>
-    ${rows.length?`<div class="tablewrap"><table class="ym" style="min-width:1000px">
-      <thead><tr><th>Cliente</th>${MESES.map(m=>`<th>${m.slice(0,3)}</th>`).join('')}<th>Estado</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
-        <td><div class="nm">${esc(r.c.nombre)}</div></td>
-        ${r.cells.map((x,idx)=>{
+  return '<div class="bar">'+
+    '<button class="btn" data-a="ayShift" data-dir="-1" '+(y<=2026?'disabled':'')+'>◀</button>'+
+    '<b>Año '+y+'</b>'+
+    '<button class="btn" data-a="ayShift" data-dir="1">▶</button>'+
+    grpSelect()+
+    searchInput('q_anual', UI.q_anual)+
+  '</div>'+
+  '<div class="card">'+
+    '<div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">vencido</span> · <span class="cl pend">·</span> pendiente.</div>'+
+    (rows.length?'<div class="tablewrap"><table class="ym" style="min-width:1000px">'+
+      '<thead><tr><th>Cliente</th>'+MESES.map(m=>'<th>'+m.slice(0,3)+'</th>').join('')+'<th>Estado</th></tr></thead>'+
+      '<tbody>'+rows.map(r=>'<tr>'+
+        '<td><div class="nm">'+esc(r.c.nombre)+'</div></td>'+
+        r.cells.map((x,idx)=>{
           if(x.s==='na')return '<td><span class="cl na">–</span></td>';
           const txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
-          return `<td><button class="cl ${x.s==='part'?'pend':x.s}" data-a="anCellDist" data-c="${r.c.id}" data-y="${y}" data-m="${idx+1}">${txt}</button></td>`}).join('')}
-        <td><b>${r.pend?r.pend+' pend.':'✓'}</b></td></tr>`).join('')}
-      </tbody></table></div>`:'<div class="empty">Sin datos coincidentes para el año.</div>'}
-  </div>`;
+          return '<td><button class="cl '+(x.s==='part'?'pend':x.s)+'" data-a="anCellDist" data-c="'+r.c.id+'" data-y="'+y+'" data-m="'+(idx+1)+'">'+txt+'</button></td>'}).join('')+
+        '<td><b>'+(r.pend?r.pend+' pend.':'✓')+'</b></td></tr>').join('')+
+      '</tbody></table></div>':'<div class="empty">Sin datos coincidentes para el año.</div>')+
+  '</div>';
 }
 
 function vCatObl(){
   const list = getOblList();
-  return `
-  <div class="bar"><button class="btn pri" data-a="nuevaObl">+ Nueva obligación</button></div>
-  <div class="card">
-    <b>Catálogo de obligaciones fiscales</b>
-    <p class="sm">Configura códigos, frecuencias y meses de vencimiento. Se aplicará automáticamente a la matriz.</p>
-    <div class="tablewrap"><table style="min-width:700px">
-      <thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acciones</th></tr></thead>
-      <tbody>${list.map(o=>`<tr>
-        <td><b>${esc(o.k)}</b></td>
-        <td>${esc(o.n)}</td>
-        <td>${o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual'}</td>
-        <td>${o.m?MESES[o.m-1]:'—'}</td>
-        <td>${o.d==='RUC'?'9.º dígito RUC':o.d}</td>
-        <td>
-          <button class="btn sm" data-a="editObl" data-k="${esc(o.k)}">Editar</button>
-          <button class="btn sm danger" data-a="delObl" data-k="${esc(o.k)}">Eliminar</button>
-        </td>
-      </tr>`).join('')}</tbody>
-    </table></div>
-  </div>`;
+  return '<div class="bar"><button class="btn pri" data-a="nuevaObl">+ Nueva obligación</button></div>'+
+  '<div class="card">'+
+    '<b>Catálogo de obligaciones fiscales</b>'+
+    '<p class="sm">Configura códigos, frecuencias y meses de vencimiento. Se aplicará automáticamente a la matriz.</p>'+
+    '<div class="tablewrap"><table style="min-width:700px">'+
+      '<thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+list.map(o=>'<tr>'+
+        '<td><b>'+esc(o.k)+'</b></td>'+
+        '<td>'+esc(o.n)+'</td>'+
+        '<td>'+(o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual')+'</td>'+
+        '<td>'+(o.m?MESES[o.m-1]:'—')+'</td>'+
+        '<td>'+(o.d==='RUC'?'9.º dígito RUC':o.d)+'</td>'+
+        '<td>'+
+          '<button class="btn sm" data-a="editObl" data-k="'+esc(o.k)+'">Editar</button> '+
+          '<button class="btn sm danger" data-a="delObl" data-k="'+esc(o.k)+'">Eliminar</button>'+
+        '</td>'+
+      '</tr>').join('')+'</tbody>'+
+    '</table></div>'+
+  '</div>';
 }
 
 function vClaves(){
   const meta=S.boveda.meta;
-  if(!meta) return `<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b>
-    <p class="sm">Ingresa una clave maestra para cifrar las contraseñas de tus clientes.</p>
-    <div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>
-    <div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>`;
+  if(!meta) return '<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b>'+
+    '<p class="sm">Ingresa una clave maestra para cifrar las contraseñas de tus clientes.</p>'+
+    '<div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>'+
+    '<div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>';
   
-  if(!VAULT.key) return `<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda de Claves</b>
-    <p class="sm">Ingresa tu clave maestra para ver o editar las credenciales.</p>
-    <div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>
-    <div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>`;
+  if(!VAULT.key) return '<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda de Claves</b>'+
+    '<p class="sm">Ingresa tu clave maestra para ver o editar las credenciales.</p>'+
+    '<div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>'+
+    '<div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
 
-  return `<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <b>🔒 Bóveda de Claves Cifradas</b>
-      <button class="btn danger sm" data-a="vLock">Bloquear Bóveda</button>
-    </div>
-    <div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>
-    ${VAULT.data.length ? `<div class="tablewrap"><table style="min-width:650px">
-      <thead><tr><th>Cliente</th><th>Servicio / Plataforma</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>
-      <tbody>${VAULT.data.map((item, idx) => `<tr>
-        <td><b>${esc(item.cliente)}</b></td>
-        <td><span class="chip info">${esc(item.servicio)}</span></td>
-        <td>${esc(item.usuario)}</td>
-        <td><input type="password" value="${esc(item.clave)}" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_${idx}">
-            <button class="btn sm" data-a="showPass" data-i="${idx}">👁</button></td>
-        <td><button class="btn sm danger" data-a="delClave" data-i="${idx}">Eliminar</button></td>
-      </tr>`).join('')}</tbody>
-    </table></div>` : '<div class="empty">No hay claves guardadas en la bóveda. Usa "+ Nueva Credencial".</div>'}
-  </div>`;
+  return '<div class="card">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+      '<b>🔒 Bóveda de Claves Cifradas</b>'+
+      '<button class="btn danger sm" data-a="vLock">Bloquear Bóveda</button>'+
+    '</div>'+
+    '<div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>'+
+    (VAULT.data.length ? '<div class="tablewrap"><table style="min-width:650px">'+
+      '<thead><tr><th>Cliente</th><th>Servicio / Plataforma</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+VAULT.data.map((item, idx) => '<tr>'+
+        '<td><b>'+esc(item.cliente)+'</b></td>'+
+        '<td><span class="chip info">'+esc(item.servicio)+'</span></td>'+
+        '<td>'+esc(item.usuario)+'</td>'+
+        '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'">'+
+            ' <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
+        '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td>'+
+      '</tr>').join('')+'</tbody>'+
+    '</table></div>' : '<div class="empty">No hay claves guardadas en la bóveda. Usa "+ Nueva Credencial".</div>')+
+  '</div>';
 }
 
 function vCobros(){
   let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
-  return `
-  <div class="bar">
-    <button class="btn pri" data-a="nuevoCobro">+ Nuevo Cobro / Acumulado</button>
-  </div>
-  <div class="card">
-    <b>📜 Registro General de Cobros y Pagos Realizados</b>
-    ${L.length?`<div class="tablewrap"><table style="margin-top:10px">
-      <thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Conceptos / Períodos</th><th>Monto Total</th><th>Pagado</th><th>Estado</th><th>Acciones</th></tr></thead>
-      <tbody>${L.map(r=>{
+  return '<div class="bar">'+
+    '<button class="btn pri" data-a="nuevoCobro">+ Nuevo Cobro / Acumulado</button>'+
+  '</div>'+
+  '<div class="card">'+
+    '<b>📜 Registro General de Cobros y Pagos Realizados</b>'+
+    (L.length?'<div class="tablewrap"><table style="margin-top:10px">'+
+      '<thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Conceptos / Períodos</th><th>Monto Total</th><th>Pagado</th><th>Estado</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+L.map(r=>{
         const ultAbono = r.x.abonos && r.x.abonos.length ? r.x.abonos[r.x.abonos.length-1].f : r.x.fechaEmision;
-        return `<tr>
-        <td><b>${fmtDate(ultAbono)}</b><div class="sm">Emisión: ${fmtDate(r.x.fechaEmision)}</div></td>
-        <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc||'')}</div></td>
-        <td>${esc(r.x.concepto||'')}</td>
-        <td>${money(r.x.monto)}</td>
-        <td><b>${money(r.pagado)}</b></td>
-        <td>${estChip(r.est)}</td>
-        <td>
-          <button class="btn sm" data-a="abonarCobro" data-id="${r.x.id}">+ Abono</button>
-          <button class="btn sm pri" data-a="imprimirRecibo" data-id="${r.x.id}">🖨️ Recibo</button>
-        </td>
-      </tr>`}).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros registrados.</div>'}
-  </div>`;
+        return '<tr>'+
+        '<td><b>'+fmtDate(ultAbono)+'</b><div class="sm">Emisión: '+fmtDate(r.x.fechaEmision)+'</div></td>'+
+        '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc||'')+'</div></td>'+
+        '<td>'+esc(r.x.concepto||'')+'</td>'+
+        '<td>'+money(r.x.monto)+'</td>'+
+        '<td><b>'+money(r.pagado)+'</b></td>'+
+        '<td>'+estChip(r.est)+'</td>'+
+        '<td>'+
+          '<button class="btn sm" data-a="abonarCobro" data-id="'+r.x.id+'">+ Abono</button> '+
+          '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+r.x.id+'">🖨️ Recibo</button>'+
+        '</td>'+
+      '</tr>'}).join('')+'</tbody></table></div>':'<div class="empty">No hay cobros registrados.</div>')+
+  '</div>';
 }
 
 function vClientes(){
   let L=clientesList().filter(c=>matchesQ(c, UI.q_cli));
-  return `
-  <div class="bar">
-    <button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button>
-    ${searchInput('q_cli', UI.q_cli)}
-  </div>
-  <div class="card">
-  ${L.length?`<div class="tablewrap"><table>
-    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>
-    <tbody>${L.map(c=>`<tr>
-      <td><div class="nm">${esc(c.nombre)}</div>${tagsCli(c)}</td>
-      <td>${esc(c.ruc)}</td><td>${esc(c.tipo)}</td>
-      <td><b>${c.cobra!==false?money(c.tarifa||0):'No aplica'}</b><div class="sm">${c.doc==='factura'?'Factura':'Recibo interno'}</div></td>
-      <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar</button></td>
-    </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Aún no hay clientes coincidentes.</div>'}
-  </div>`;
+  return '<div class="bar">'+
+    '<button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button>'+
+    searchInput('q_cli', UI.q_cli)+
+  '</div>'+
+  '<div class="card">'+
+  (L.length?'<div class="tablewrap"><table>'+
+    '<thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>'+
+    '<tbody>'+L.map(c=>'<tr>'+
+      '<td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td>'+
+      '<td>'+esc(c.ruc)+'</td><td>'+esc(c.tipo)+'</td>'+
+      '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b><div class="sm">'+(c.doc==='factura'?'Factura':'Recibo interno')+'</div></td>'+
+      '<td><button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button></td>'+
+    '</tr>').join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes coincidentes.</div>')+
+  '</div>';
 }
 
 function vGrupos(){
   const L=activos();
   const grp={};
   L.forEach(c=>{ if(c.grupo) (grp[c.grupo]=grp[c.grupo]||[]).push(c); });
-  return `
-  <div class="card"><b>🏢 Grupos de empresas registrados</b>
-    ${Object.keys(grp).length?Object.entries(grp).map(([g,clis])=>`<div style="margin-top:10px">
-      <b>${esc(g)}</b> (${clis.length} empresas)${clis.map(c=>`<div class="sm">• ${esc(c.nombre)}</div>`).join('')}
-    </div>`).join(''):'<div class="empty">No has asignado grupos a tus clientes.</div>'}
-  </div>`;
+  return '<div class="card"><b>🏢 Grupos de empresas registrados</b>'+
+    (Object.keys(grp).length?Object.entries(grp).map(([g,clis])=>'<div style="margin-top:10px">'+
+      '<b>'+esc(g)+'</b> ('+clis.length+' empresas)'+
+      clis.map(c=>'<div class="sm">• '+esc(c.nombre)+'</div>').join('')+
+    '</div>').join(''):'<div class="empty">No has asignado grupos a tus clientes.</div>')+
+  '</div>';
 }
 
 function vAjustes(){
-  return `
-  <div class="card" style="max-width:600px">
-    <b>Configuración de Seguridad y Login</b>
-    <p class="sm">Configura la contraseña general requerida para ingresar a la bitácora.</p>
-    <div class="fgrid">
-      <div class="full"><label>Nueva Clave de Acceso<input type="password" id="set_gate_pass" value="${esc(gateCfg())}"></label></div>
-    </div>
-    <div class="actions" style="margin-top:12px">
-      <button class="btn pri" data-a="saveGatePass">Guardar Clave</button>
-      ${gateCfg()?`<button class="btn danger" data-a="removeGatePass">Quitar Clave</button> <button class="btn danger" data-a="lockApp">🔒 Cerrar sesión ahora</button>`:''}
-    </div>
-  </div>`;
+  return '<div class="card" style="max-width:600px">'+
+    '<b>Configuración de Seguridad y Login</b>'+
+    '<p class="sm">Configura la contraseña general requerida para ingresar a la bitácora.</p>'+
+    '<div class="fgrid">'+
+      '<div class="full"><label>Nueva Clave de Acceso<input type="password" id="set_gate_pass" value="'+esc(gateCfg())+'"></label></div>'+
+    '</div>'+
+    '<div class="actions" style="margin-top:12px">'+
+      '<button class="btn pri" data-a="saveGatePass">Guardar Clave</button>'+
+      (gateCfg()?' <button class="btn danger" data-a="removeGatePass">Quitar Clave</button> <button class="btn danger" data-a="lockApp">🔒 Cerrar sesión ahora</button>':'')+
+    '</div>'+
+  '</div>';
 }
 
 /* ============ MODALES ============ */
 function openModal(html,wide){
-  $('#modal').innerHTML=`<div class="bg" data-a="bgclose"><div class="box ${wide?'wide':''}">${html}</div></div>`;
+  $('#modal').innerHTML='<div class="bg" data-a="bgclose"><div class="box '+(wide?'wide':'')+'">'+html+'</div></div>';
 }
 function closeModal(){$('#modal').innerHTML=''}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
@@ -730,91 +714,91 @@ function modalCliente(id){
 
   const renderObGroup = (items) => items.map(o => {
     const checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
-    return `<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="${o.k}" ${checked}> ${esc(o.n)}</label>`;
+    return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>';
   }).join('');
 
-  openModal(`<h2>${id?'Editar cliente':'Nuevo cliente'}</h2>
-  <div class="fgrid">
-    <div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="${esc(c.nombre)}"></label></div>
-    <div><label>RUC<input id="m_ruc" value="${esc(c.ruc)}"></label></div>
-    <div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" ${c.tipo==='PERSONA NATURAL'?'selected':''}>Persona Natural</option><option value="SOCIEDAD" ${c.tipo==='SOCIEDAD'?'selected':''}>Sociedad</option></select></label></div>
-    <div class="full"><label>Grupo / Holding<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
+  openModal('<h2>'+(id?'Editar cliente':'Nuevo cliente')+'</h2>'+
+  '<div class="fgrid">'+
+    '<div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="'+esc(c.nombre)+'"></label></div>'+
+    '<div><label>RUC<input id="m_ruc" value="'+esc(c.ruc)+'"></label></div>'+
+    '<div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" '+(c.tipo==='PERSONA NATURAL'?'selected':'')+'>Persona Natural</option><option value="SOCIEDAD" '+(c.tipo==='SOCIEDAD'?'selected':'')+'>Sociedad</option></select></label></div>'+
+    '<div class="full"><label>Grupo / Holding<input id="m_grupo" value="'+esc(c.grupo)+'"></label></div>'+
     
-    <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
-      <b>Condiciones Comerciales y de Cobro:</b>
-    </div>
-    <div><label>¿Se le cobra honorarios?<select id="m_cobra"><option value="true" ${c.cobra!==false?'selected':''}>Sí</option><option value="false" ${c.cobra===false?'selected':''}>No (Gratuito / Especial)</option></select></label></div>
-    <div><label>Tarifa Referencial ($)<input id="m_tarifa" type="number" step="0.01" value="${c.tarifa||''}"></label></div>
-    <div><label>Frecuencia de Cobro<select id="m_cobroFreq"><option value="M" ${c.cobroFreq==='M'?'selected':''}>Mensual</option><option value="S" ${c.cobroFreq==='S'?'selected':''}>Semestral</option><option value="A" ${c.cobroFreq==='A'?'selected':''}>Anual</option><option value="T" ${c.cobroFreq==='T'?'selected':''}>Por trámite / Eventual</option></select></label></div>
-    <div><label>Documento que se emite<select id="m_doc"><option value="factura" ${c.doc==='factura'?'selected':''}>Factura electrónica</option><option value="recibo" ${c.doc==='recibo'?'selected':''}>Recibo / Doc. interno</option><option value="sin" ${c.doc==='sin'?'selected':''}>Sin documento</option></select></label></div>
+    '<div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">'+
+      '<b>Condiciones Comerciales y de Cobro:</b>'+
+    '</div>'+
+    '<div><label>¿Se le cobra honorarios?<select id="m_cobra"><option value="true" '+(c.cobra!==false?'selected':'')+'>Sí</option><option value="false" '+(c.cobra===false?'selected':'')+'>No (Gratuito / Especial)</option></select></label></div>'+
+    '<div><label>Tarifa Referencial ($)<input id="m_tarifa" type="number" step="0.01" value="'+(c.tarifa||'')+'"></label></div>'+
+    '<div><label>Frecuencia de Cobro<select id="m_cobroFreq"><option value="M" '+(c.cobroFreq==='M'?'selected':'')+'>Mensual</option><option value="S" '+(c.cobroFreq==='S'?'selected':'')+'>Semestral</option><option value="A" '+(c.cobroFreq==='A'?'selected':'')+'>Anual</option><option value="T" '+(c.cobroFreq==='T'?'selected':'')+'>Por trámite / Eventual</option></select></label></div>'+
+    '<div><label>Documento que se emite<select id="m_doc"><option value="factura" '+(c.doc==='factura'?'selected':'')+'>Factura electrónica</option><option value="recibo" '+(c.doc==='recibo'?'selected':'')+'>Recibo / Doc. interno</option><option value="sin" '+(c.doc==='sin'?'selected':'')+'>Sin documento</option></select></label></div>'+
 
-    <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
-      <b>Obligaciones Asignadas al Cliente:</b>
+    '<div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">'+
+      '<b>Obligaciones Asignadas al Cliente:</b>'+
       
-      <div class="sec-title">📅 Obligaciones Mensuales</div>
-      <div class="ob-grid">${renderObGroup(mens)}</div>
+      '<div class="sec-title">📅 Obligaciones Mensuales</div>'+
+      '<div class="ob-grid">'+renderObGroup(mens)+'</div>'+
 
-      ${sem.length ? `<div class="sec-title">📆 Obligaciones Semestrales</div><div class="ob-grid">${renderObGroup(sem)}</div>` : ''}
+      (sem.length ? '<div class="sec-title">📆 Obligaciones Semestrales</div><div class="ob-grid">'+renderObGroup(sem)+'</div>' : '')+
 
-      <div class="sec-title">🗓️ Obligaciones Anuales</div>
-      <div class="ob-grid">${renderObGroup(anu)}</div>
-    </div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar Cliente</button></div>`, true);
+      '<div class="sec-title">🗓️ Obligaciones Anuales</div>'+
+      '<div class="ob-grid">'+renderObGroup(anu)+'</div>'+
+    '</div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="'+(id||'')+'">Guardar Cliente</button></div>', true);
 }
 
 function modalObl(key){
   const list = getOblList();
   const o = key ? (list.find(x => x.k === key) || {k:key, n:'', f:'P', m:0, d:'RUC'}) : {k:'', n:'', f:'P', m:0, d:'RUC'};
 
-  openModal(`<h2>${key ? 'Editar Obligación' : 'Nueva Obligación'}</h2>
-  <div class="fgrid">
-    <div><label>Código / Clave<input id="mo_k" value="${esc(o.k)}" ${key?'readonly style="background:var(--bg)"':''}></label></div>
-    <div><label>Nombre<input id="mo_n" value="${esc(o.n)}"></label></div>
-    <div><label>Frecuencia<select id="mo_f">
-      <option value="P" ${o.f==='P'?'selected':''}>Mensual</option>
-      <option value="S" ${o.f==='S'?'selected':''}>Semestral</option>
-      <option value="A" ${o.f==='A'?'selected':''}>Anual</option>
-    </select></label></div>
-    <div><label>Mes de Vencimiento (Anuales)<select id="mo_m">
-      <option value="0">Según período</option>
-      ${MESES.map((m,idx) => `<option value="${idx+1}" ${o.m===(idx+1)?'selected':''}>${m}</option>`).join('')}
-    </select></label></div>
-    <div class="full"><label>Día de Vencimiento<select id="mo_d">
-      <option value="RUC" ${o.d==='RUC'?'selected':''}>Según 9.º dígito del RUC</option>
-      ${[...Array(31)].map((_,i) => `<option value="${i+1}" ${String(o.d)===String(i+1)?'selected':''}>Día ${i+1}</option>`).join('')}
-    </select></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="${key||''}">Guardar Obligación</button></div>`);
+  openModal('<h2>'+(key ? 'Editar Obligación' : 'Nueva Obligación')+'</h2>'+
+  '<div class="fgrid">'+
+    '<div><label>Código / Clave<input id="mo_k" value="'+esc(o.k)+'" '+(key?'readonly style="background:var(--bg)"':'')+'></label></div>'+
+    '<div><label>Nombre<input id="mo_n" value="'+esc(o.n)+'"></label></div>'+
+    '<div><label>Frecuencia<select id="mo_f">'+
+      '<option value="P" '+(o.f==='P'?'selected':'')+'>Mensual</option>'+
+      '<option value="S" '+(o.f==='S'?'selected':'')+'>Semestral</option>'+
+      '<option value="A" '+(o.f==='A'?'selected':'')+'>Anual</option>'+
+    '</select></label></div>'+
+    '<div><label>Mes de Vencimiento (Anuales)<select id="mo_m">'+
+      '<option value="0">Según período</option>'+
+      MESES.map((m,idx) => '<option value="'+(idx+1)+'" '+(o.m===(idx+1)?'selected':'')+'>'+m+'</option>').join('')+
+    '</select></label></div>'+
+    '<div class="full"><label>Día de Vencimiento<select id="mo_d">'+
+      '<option value="RUC" '+(o.d==='RUC'?'selected':'')+'>Según 9.º dígito del RUC</option>'+
+      [...Array(31)].map((_,i) => '<option value="'+(i+1)+'" '+(String(o.d)===String(i+1)?'selected':'')+'>Día '+(i+1)+'</option>').join('')+
+    '</select></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="'+(key||'')+'">Guardar Obligación</button></div>');
 }
 
 function modalClave(){
   const clis = clientesList();
-  openModal(`<h2>Nueva Credencial Cifrada</h2>
-  <div class="fgrid">
-    <div class="full">
-      <label>Cliente registrado<select id="vk_cli_sel">
-        <option value="">-- Seleccionar cliente --</option>
-        ${clis.map(c => `<option value="${esc(c.nombre)}">${esc(c.nombre)} (${esc(c.ruc)})</option>`).join('')}
-      </select></label>
-    </div>
-    <div class="full"><label>O ingresa el nombre directamente<input id="vk_cli_txt" placeholder="Si no está en la lista de clientes"></label></div>
-    <div>
-      <label>Servicio / Plataforma<select id="vk_srv_sel" data-f="srv_sel">
-        <option value="SRI">SRI (Clave / RUC)</option>
-        <option value="IESS">IESS (Patronal / Afiliado)</option>
-        <option value="Supercias">Superintendencia de Compañías</option>
-        <option value="Patente Municipal">Municipio / Patente</option>
-        <option value="Correo electrónico">Correo electrónico</option>
-        <option value="Firma Electrónica">Firma Electrónica (Pin)</option>
-        <option value="OTRO">Otro servicio personalizado</option>
-      </select></label>
-    </div>
-    <div><input id="vk_srv_txt" placeholder="Escribe el nombre del servicio" style="display:none;margin-top:18px"></div>
-    <div class="full"><label>Usuario / RUC / Cédula<input id="vk_usr"></label></div>
-    <div class="full"><label>Contraseña / Pin<input id="vk_pwd" type="text"></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>`);
+  openModal('<h2>Nueva Credencial Cifrada</h2>'+
+  '<div class="fgrid">'+
+    '<div class="full">'+
+      '<label>Cliente registrado<select id="vk_cli_sel">'+
+        '<option value="">-- Seleccionar cliente --</option>'+
+        clis.map(c => '<option value="'+esc(c.nombre)+'">'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>').join('')+
+      '</select></label>'+
+    '</div>'+
+    '<div class="full"><label>O ingresa el nombre directamente<input id="vk_cli_txt" placeholder="Si no está en la lista de clientes"></label></div>'+
+    '<div>'+
+      '<label>Servicio / Plataforma<select id="vk_srv_sel" data-f="srv_sel">'+
+        '<option value="SRI">SRI (Clave / RUC)</option>'+
+        '<option value="IESS">IESS (Patronal / Afiliado)</option>'+
+        '<option value="Supercias">Superintendencia de Compañías</option>'+
+        '<option value="Patente Municipal">Municipio / Patente</option>'+
+        '<option value="Correo electrónico">Correo electrónico</option>'+
+        '<option value="Firma Electrónica">Firma Electrónica (Pin)</option>'+
+        '<option value="OTRO">Otro servicio personalizado</option>'+
+      '</select></label>'+
+    '</div>'+
+    '<div><input id="vk_srv_txt" placeholder="Escribe el nombre del servicio" style="display:none;margin-top:18px"></div>'+
+    '<div class="full"><label>Usuario / RUC / Cédula<input id="vk_usr"></label></div>'+
+    '<div class="full"><label>Contraseña / Pin<input id="vk_pwd" type="text"></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>');
 }
 
 function modalCobro(cid, conceptoDef, montoDef){
@@ -822,23 +806,23 @@ function modalCobro(cid, conceptoDef, montoDef){
   const targetCli = cid ? S.clientes[cid] : null;
   const autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
 
-  openModal(`<h2>Registrar Cobro / Recibo</h2>
-  <div class="fgrid">
-    <div class="full"><label>Cliente<select id="mc_cli" data-f="mc_cli_sel">
-      <option value="">-- Seleccionar cliente --</option>
-      ${clis.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.nombre)}</option>`).join('')}
-    </select></label></div>
+  openModal('<h2>Registrar Cobro / Recibo</h2>'+
+  '<div class="fgrid">'+
+    '<div class="full"><label>Cliente<select id="mc_cli" data-f="mc_cli_sel">'+
+      '<option value="">-- Seleccionar cliente --</option>'+
+      clis.map(c=>'<option value="'+c.id+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+'</option>').join('')+
+    '</select></label></div>'+
     
-    <div class="full" id="mc_multi_container">
-      <label>Concepto / Detalle de Servicios Acumulados:<input id="mc_con" value="${esc(conceptoDef||'Honorarios profesionales')}"></label>
-    </div>
+    '<div class="full" id="mc_multi_container">'+
+      '<label>Concepto / Detalle de Servicios Acumulados:<input id="mc_con" value="'+esc(conceptoDef||'Honorarios profesionales')+'"></label>'+
+    '</div>'+
 
-    <div><label>Monto Total A Cobrar ($)<input id="mc_mon" type="number" step="0.01" value="${autoMonto||''}"></label></div>
-    <div><label>Monto Cobrado Hoy ($)<input id="mc_pag" type="number" step="0.01" value="${autoMonto||''}"></label></div>
-    <div><label>Fecha de Emisión<input id="mc_fec" type="date" value="${todayStr()}"></label></div>
-    <div><label>Fecha de Cobro / Abono<input id="mc_fec_pago" type="date" value="${todayStr()}"></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Registro de Cobro</button></div>`);
+    '<div><label>Monto Total A Cobrar ($)<input id="mc_mon" type="number" step="0.01" value="'+(autoMonto||'')+'"></label></div>'+
+    '<div><label>Monto Cobrado Hoy ($)<input id="mc_pag" type="number" step="0.01" value="'+(autoMonto||'')+'"></label></div>'+
+    '<div><label>Fecha de Emisión<input id="mc_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Fecha de Cobro / Abono<input id="mc_fec_pago" type="date" value="'+todayStr()+'"></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Registro de Cobro</button></div>');
 }
 
 function modalAbono(id){
@@ -846,13 +830,13 @@ function modalAbono(id){
   const c = S.clientes[x.clienteId]||{nombre:'Cliente'};
   const calc = cobroCalc(x);
 
-  openModal(`<h2>Abonar a Cobro Pendiente</h2>
-  <p><b>Cliente:</b> ${esc(c.nombre)}<br><b>Concepto:</b> ${esc(x.concepto)}<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">${money(calc.saldo)}</span></p>
-  <div class="fgrid">
-    <div><label>Monto del Abono ($)<input id="ma_monto" type="number" step="0.01" value="${calc.saldo}"></label></div>
-    <div><label>Fecha del Abono<input id="ma_fec" type="date" value="${todayStr()}"></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="${id}">Registrar Abono</button></div>`);
+  openModal('<h2>Abonar a Cobro Pendiente</h2>'+
+  '<p><b>Cliente:</b> '+esc(c.nombre)+'<br><b>Concepto:</b> '+esc(x.concepto)+'<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">'+money(calc.saldo)+'</span></p>'+
+  '<div class="fgrid">'+
+    '<div><label>Monto del Abono ($)<input id="ma_monto" type="number" step="0.01" value="'+calc.saldo+'"></label></div>'+
+    '<div><label>Fecha del Abono<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Registrar Abono</button></div>');
 }
 
 function modalAnDist(cid, y, mNum){
@@ -863,14 +847,14 @@ function modalAnDist(cid, y, mNum){
   const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
   const aAv = avanceOf(cid, String(y));
 
-  openModal(`<h2>${esc(c.nombre)} · ${MESES[mNum-1]} ${y}</h2>
-  ${mItems.length?`<b>Mensuales (${mKey}):</b><div class="obs" style="margin:6px 0 12px">${mItems.map(o=>`<button class="ob ${mAv.done&&mAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${mKey}" data-m="${mNum}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div>`:''}
-  ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-m="${mNum}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div>`:''}
-  <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    ${c.cobra !== false ? `<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="${cid}" data-m="${MESES[mNum-1]}${y}">+ Registrar cobro/honorario</button>` : '<span></span>'}
-    <button class="btn" data-a="close">Listo</button>
-  </div>`);
+  openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
+  (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(o=>'<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div>':'')+
+  (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(o=>'<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div>':'')+
+  '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0">'+
+  '<div style="display:flex;justify-content:space-between;align-items:center">'+
+    (c.cobra !== false ? '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'">+ Registrar cobro/honorario</button>' : '<span></span>')+
+    '<button class="btn" data-a="close">Listo</button>'+
+  '</div>');
 }
 
 function imprimirReciboCobro(id){
@@ -879,49 +863,44 @@ function imprimirReciboCobro(id){
   const calc = cobroCalc(x);
   const ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1].f : x.fechaEmision;
 
-  const html = `
-    <div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">
-        <div>
-          <h2 style="margin:0;font-size:22px">COMPROBANTE / RECIBO DE COBRO</h2>
-          <div style="font-size:13px;color:#555">Servicios Contables y Tributarios</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;font-weight:bold">RECIBO N.° ${id.slice(-6).toUpperCase()}</div>
-          <div style="font-size:13px">Fecha: ${fmtDate(ultAbono)}</div>
-        </div>
-      </div>
-      
-      <table style="width:100%;margin-bottom:15px;font-size:14px;border:none">
-        <tr><td><strong>RECIBIDO DE:</strong> ${esc(c.nombre)}</td><td><strong>RUC/C.I.:</strong> ${esc(c.ruc)}</td></tr>
-        <tr><td colspan="2" style="padding-top:8px"><strong>CONCEPTO:</strong> ${esc(x.concepto)}</td></tr>
-      </table>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px">
-        <thead>
-          <tr style="background:#eee">
-            <th style="border:1px solid #000;padding:6px;text-align:left">Detalle / Período</th>
-            <th style="border:1px solid #000;padding:6px;text-align:right">Monto Total</th>
-            <th style="border:1px solid #000;padding:6px;text-align:right">Pagado</th>
-            <th style="border:1px solid #000;padding:6px;text-align:right">Saldo</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="border:1px solid #000;padding:8px">${esc(x.concepto)}</td>
-            <td style="border:1px solid #000;padding:8px;text-align:right">${money(x.monto)}</td>
-            <td style="border:1px solid #000;padding:8px;text-align:right">${money(calc.pagado)}</td>
-            <td style="border:1px solid #000;padding:8px;text-align:right">${money(calc.saldo)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">
-        <div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Entregué Conforme</div>
-        <div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Recibí Conforme</div>
-      </div>
-    </div>
-  `;
+  const html = '<div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
+        '<div>'+
+          '<h2 style="margin:0;font-size:22px">COMPROBANTE / RECIBO DE COBRO</h2>'+
+          '<div style="font-size:13px;color:#555">Servicios Contables y Tributarios</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:14px;font-weight:bold">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
+          '<div style="font-size:13px">Fecha: '+fmtDate(ultAbono)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<table style="width:100%;margin-bottom:15px;font-size:14px;border:none">'+
+        '<tr><td><strong>RECIBIDO DE:</strong> '+esc(c.nombre)+'</td><td><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+        '<tr><td colspan="2" style="padding-top:8px"><strong>CONCEPTO:</strong> '+esc(x.concepto)+'</td></tr>'+
+      '</table>'+
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px">'+
+        '<thead>'+
+          '<tr style="background:#eee">'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left">Detalle / Período</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right">Monto Total</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right">Pagado</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right">Saldo</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td style="border:1px solid #000;padding:8px">'+esc(x.concepto)+'</td>'+
+            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(x.monto)+'</td>'+
+            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(calc.pagado)+'</td>'+
+            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(calc.saldo)+'</td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Entregué Conforme</div>'+
+        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Recibí Conforme</div>'+
+      '</div>'+
+    '</div>';
 
   $('#print-area').innerHTML = html;
   window.print();
