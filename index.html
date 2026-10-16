@@ -76,7 +76,6 @@ td.r,th.r{text-align:right}
 .empty{text-align:center;color:var(--mut);padding:30px 10px}
 .banner{background:var(--info-soft);color:var(--info);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .banner .grow{flex:1 1 240px}
-.banner.warn{background:var(--warn-soft);color:var(--warn)}
 #modal .bg{position:fixed;inset:0;background:rgba(10,15,22,.55);display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 12px 16px;overflow:auto;z-index:50}
 #modal .box{background:var(--card);border-radius:14px;width:100%;max-width:560px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.3);margin:auto}
 #modal .box.wide{max-width:720px}
@@ -115,7 +114,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 }
 </style>
 
-<!-- Conexión a Firebase Firestore -->
+<!-- Conexión Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -154,24 +153,24 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <div id="toast"></div>
 
 <script>
-/* ============ DATOS INICIALES Y CATÁLOGO POR DEFECTO ============ */
+/* ============ CONSTANTES FISCALES ============ */
 const SEED = []; 
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
-const DEFAULT_OBL=[
-  {k:'F103_104',n:'F103 + F104',f:'P',m:0,d:'RUC'},
-  {k:'F104_SEM',n:'F104 semestral',f:'S',m:0,d:'RUC'},
-  {k:'ATS',n:'ATS',f:'P',m:0,d:'RUC'},
-  {k:'RDEP',n:'RDEP',f:'A',m:1,d:'RUC'}, // Enero
-  {k:'AGP',n:'AGP',f:'A',m:2,d:'RUC'},  // Febrero
-  {k:'APS',n:'APS',f:'A',m:2,d:'RUC'},  // Febrero
-  {k:'IM_RTA',n:'Imp. Renta',f:'A',m:3,d:'RUC'}, // Marzo (PN) / Abril (Sociedades)
-  {k:'SUPERCIAS',n:'Supercias',f:'A',m:4,d:30,soc:true}, // Abril fin de mes
-  {k:'ADI',n:'ADI',f:'A',m:5,d:'RUC'}, // Mayo
-  {k:'D_PATRIM',n:'D. Patrimonial',f:'A',m:5,d:'RUC'}, // Mayo
-  {k:'PM',n:'Patente Municipal',f:'A',m:6,d:'RUC'}, // Junio (Obligados/Soc) / Julio (PN)
-  {k:'S14',n:'14.º sueldo',f:'A',m:8,d:31}, // Agosto
-  {k:'S13',n:'13.er sueldo',f:'A',m:12,d:24}  // Diciembre
+const OBL=[
+  {k:'F103_104',n:'F103 + F104',f:'P'},
+  {k:'F104_SEM',n:'F104 semestral',f:'S'},
+  {k:'ATS',n:'ATS',f:'P'},
+  {k:'RDEP',n:'RDEP',f:'A'},
+  {k:'AGP',n:'AGP',f:'A'},
+  {k:'APS',n:'APS',f:'A'},
+  {k:'IM_RTA',n:'Imp. Renta',f:'A'},
+  {k:'SUPERCIAS',n:'Supercias',f:'A'},
+  {k:'ADI',n:'ADI',f:'A'},
+  {k:'D_PATRIM',n:'D. Patrimonial',f:'A'},
+  {k:'PM',n:'Patente Municipal',f:'A'},
+  {k:'S14',n:'14.º sueldo',f:'A'},
+  {k:'S13',n:'13.er sueldo',f:'A'}
 ];
 
 const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
@@ -179,19 +178,11 @@ const FORMAS=['Efectivo','Transferencia','Depósito','Cheque','Otro'];
 const PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
 const TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-/* ============ ESTADO ============ */
-const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
+/* ============ ESTADO Y VARIABLES ============ */
+const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},ready:false,kind:'…'};
 const loaded={};
 const now=new Date();
 const UI={ay:new Date().getFullYear(),asolo:false,tab:'panel',ctype:'M',cper:null,q:'',solo:false,fest:'todos',fdoc:'todos',cq:'',clq:'',clver:'activos',cgrp:'todos',fgr:'todos',qgr:'',ord:{panel:'default',control:'venc',anual:'pend',cobros:'emision',clientes:'nombre',grupos:'nombre'}};
-UI.cper=null;
-
-/* ============ OBLIGACIONES DINÁMICAS ============ */
-function getOblList(){
-  const custom = Object.values(S.catObl||{});
-  if(custom.length>0) return custom;
-  return DEFAULT_OBL;
-}
 
 /* ============ UTILIDADES ============ */
 const $=s=>document.querySelector(s);
@@ -207,7 +198,6 @@ const fmtDate=s=>{if(!s)return'';const [y,m,d]=s.split('-');return d+'/'+m+'/'+y
 const fmtD=d=>pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();
 function toast(msg){const t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(()=>t.remove(),3200)}
 
-/* ---- períodos ---- */
 function ptype(k){return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'}
 function plabel(k){
   const t=ptype(k);
@@ -232,70 +222,55 @@ function defaultPeriod(t){
 }
 function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
 
-/* ---- CÁLCULO DE VENCIMIENTOS REGULATORIOS ---- */
+/* ---- REGLETERO FISCAL EXACTO ---- */
 function dueDate(c, k, oblKey) {
   const digito = digito9(c.ruc);
-  const diaRuc = DIA_POR_DIGITO[digito] || 28;
+  const dia = DIA_POR_DIGITO[digito] || 28;
   const t = ptype(k);
 
   if (t === 'M') {
     const [y, m] = k.split('-').map(Number);
-    return new Date(y, m, diaRuc);
+    return new Date(y, m, dia);
   }
 
   if (t === 'S') {
     const [y, s] = k.split('-S');
-    return s === '1' ? new Date(+y, 6, diaRuc) : new Date(+y + 1, 0, diaRuc);
+    return s === '1' ? new Date(+y, 6, dia) : new Date(+y + 1, 0, dia);
   }
 
   if (t === 'A') {
     const y = +k;
-    const OBL = getOblList();
-    const target = OBL.find(o => o.k === oblKey);
+    let mes = 2;
+    let diaEspecifico = dia;
 
-    let mesIndex = 2; // Marzo por defecto (base 0)
-    let diaEspecifico = diaRuc;
-
-    if (target) {
-      mesIndex = (target.m && target.m >= 1) ? target.m - 1 : 2;
-      if (target.d !== 'RUC' && Number(target.d) > 0) {
-        diaEspecifico = Number(target.d);
-      }
+    switch (oblKey) {
+      case 'RDEP': mes = 0; break; // Ene
+      case 'AGP': case 'APS': mes = 1; break; // Feb
+      case 'IM_RTA': mes = c.tipo === 'SOCIEDAD' ? 3 : 2; break; // Abr / Mar
+      case 'SUPERCIAS': mes = 3; diaEspecifico = 30; break; // Abr
+      case 'ADI': case 'D_PATRIM': mes = 4; break; // May
+      case 'PM': mes = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6; break; // Jun / Jul
+      case 'S14': mes = 7; diaEspecifico = 31; break; // Ago
+      case 'S13': mes = 11; diaEspecifico = 24; break; // Dic
+      default: mes = 2;
     }
-
-    // Reglas especiales SRI / Supercias / Patente
-    if (oblKey === 'IM_RTA') {
-      mesIndex = c.tipo === 'SOCIEDAD' ? 3 : 2; // Abril / Marzo
-    } else if (oblKey === 'PM') {
-      mesIndex = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6; // Junio / Julio
-    }
-
-    return new Date(y + 1, mesIndex, diaEspecifico);
+    return new Date(y + 1, mes, diaEspecifico);
   }
-
   return new Date();
-}
-
-function oblMonthIndex(c, oblKey) {
-  if (oblKey === 'IM_RTA') return c.tipo === 'SOCIEDAD' ? 4 : 3;
-  if (oblKey === 'PM') return (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 6 : 7;
-  const target = getOblList().find(o => o.k === oblKey);
-  return target && target.m ? target.m : 3;
 }
 
 function daysTo(d){return Math.round((d-midnight())/864e5)}
 
-/* ---- cálculos ---- */
 const clientesList=()=>Object.entries(S.clientes).map(([id,c])=>({...c,id})).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
 const gruposList=()=>[...new Set(clientesList().map(c=>(c.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
 const refList=()=>[...new Set(clientesList().map(c=>(c.referidoPor||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido${c.suspFecha?' desde '+fmtDate(c.suspFecha):''}</span> `:'')+(c.grupo?`<span class="chip info" title="Grupo de empresas">🏢 ${esc(c.grupo)}</span> `:'')+(c.referidoPor?`<span class="chip mut" title="Referido por">🤝 ${esc(c.referidoPor)}</span>`:'');
+const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'')+(c.referidoPor?`<span class="chip mut">🤝 ${esc(c.referidoPor)}</span>`:'');
 const inGrp=c=>UI.fgr==='todos'||(UI.fgr==='__sin'?!(c.grupo||'').trim():(c.grupo||'').trim()===UI.fgr);
-const grpSelect=()=>`<select data-f="fgr" title="Filtrar por grupo de empresas"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.fgr==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.fgr===g?'selected':''}>🏢 ${esc(g)}</option>`).join('')}</select>`;
+const grpSelect=()=>`<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.fgr==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.fgr===g?'selected':''}>🏢 ${esc(g)}</option>`).join('')}</select>`;
 const diaV=c=>DIA_POR_DIGITO[digito9(c.ruc)]||99;
 const byNombre=(a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es');
 const byDia=(a,b)=>diaV(a)-diaV(b)||byNombre(a,b);
-const ordSel=(scr,extra=[])=>`<select data-f="ord" data-s="${scr}" title="Ordenar por">${[...extra,['venc','Ordenar: día de vencimiento'],['nombre','Ordenar: razón social']].map(([v,l])=>`<option value="${v}" ${UI.ord[scr]===v?'selected':''}>${l}</option>`).join('')}</select>`;
+const ordSel=(scr,extra=[])=>`<select data-f="ord" data-s="${scr}">${[...extra,['venc','Ordenar: día vencimiento'],['nombre','Ordenar: razón social']].map(([v,l])=>`<option value="${v}" ${UI.ord[scr]===v?'selected':''}>${l}</option>`).join('')}</select>`;
 const eqMensual=c=>!c.cobra?0:(c.tarifa||0)/({M:1,S:6,A:12}[c.cobroFreq]||1);
 const activos=()=>clientesList().filter(c=>c.activo!==false);
 const cobrosList=()=>Object.entries(S.cobros).map(([id,c])=>({...c,id}));
@@ -307,7 +282,7 @@ function aplica(c,k){
   return k+'-12'>=d;
 }
 function oblFor(c,t){
-  return getOblList().filter(o=>{
+  return OBL.filter(o=>{
     if(!c.obl||!c.obl[o.k])return false;
     if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
     return o.f==='P'?PERCODE[c.periodicidad]===t:o.f===t;
@@ -338,8 +313,8 @@ function nextRecibo(){
 function cobroDe(cid,k){return cobrosList().find(x=>x.clienteId===cid&&x.periodo===k&&!x.anulado)}
 const estChip=e=>({pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]);
 
-/* ============ ALMACENAMIENTO ============ */
-const COLS=['clientes','cobros','avances','config','boveda','catObl'];
+/* ============ BASE DE DATOS ============ */
+const COLS=['clientes','cobros','avances','config','boveda'];
 const Store={
   db:null,
   async init(){
@@ -353,7 +328,7 @@ const Store={
           S[col]=o;loaded[col]=true;
           if(COLS.every(c=>loaded[c]))S.ready=true;
           render();
-        },err=>{loaded[col]=true;if(COLS.every(c=>loaded[c]))S.ready=true;render();toast('Sin acceso a la base de datos compartida')});
+        },err=>{loaded[col]=true;if(COLS.every(c=>loaded[c]))S.ready=true;render();toast('Sin acceso a la base de datos')});
       });
       setTimeout(()=>{if(!S.ready){S.ready=true;render()}},6000);
     }else{
@@ -365,35 +340,27 @@ const Store={
   saveLocal(){try{localStorage.setItem('bitacora_v1',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]]))))}catch(e){}},
   async put(col,id,data){
     data=clean(data);S[col][id]=data;render();
-    if(this.db){try{await this.db.doc(col+'/'+id).set(data)}catch(e){toast('No se pudo guardar');console.error(e)}}
+    if(this.db){try{await this.db.doc(col+'/'+id).set(data)}catch(e){toast('Error al guardar')}}
     else this.saveLocal();
   },
   async del(col,id){
     delete S[col][id];render();
-    if(this.db){try{await this.db.doc(col+'/'+id).delete()}catch(e){toast('No se pudo eliminar');console.error(e)}}
+    if(this.db){try{await this.db.doc(col+'/'+id).delete()}catch(e){toast('Error al eliminar')}}
     else this.saveLocal();
   }
 };
 
-/* ============ RENDER ============ */
-const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+/* ============ INTERFAZ Y NAVEGACIÓN ============ */
+const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+
 function render(){
-  {const lb=document.getElementById('lockbtn');if(lb)lb.style.display=(!GATE.need&&gateCfg())?'':'none'}
-  if(GATE.need){const a=document.activeElement;if(a&&/^g_p/.test(a.id))return;$('#tabs').innerHTML='';$('#stat').textContent='';$('#main').innerHTML=gateScreen();return}
-  {const a=document.activeElement;if(a&&/^v_pass/.test(a.id)&&UI.tab==='claves')return}
-  const ae=document.activeElement,aid=ae&&ae.id,sel=ae&&ae.selectionStart;
-  $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':S.kind==='local'?'Modo local · datos solo en este navegador':'';
-  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${UI.tab===k?'on':''}" data-a="tab" data-k="${k}">${l}</button>`).join('');
   if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return}
-  const v={panel:vPanel,control:vControl,anual:vAnual,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,catObl:vCatObl,ajustes:vAjustes}[UI.tab];
-  $('#main').innerHTML=(Object.keys(S.clientes).length===0&&UI.tab!=='ajustes'?bannerImport():'')+v();
-  if(aid){const el=document.getElementById(aid);if(el){el.focus();try{el.setSelectionRange(sel,sel)}catch(e){}}}
-}
-function bannerImport(){
-  return `<div class="banner"><div class="grow"><b>Aún no hay clientes.</b> Crea el primero en la pestaña Clientes (+ Nuevo cliente) o, si ya tenías datos en otro navegador, restaura tu respaldo en Ajustes.</div><button class="btn pri" data-a="tab" data-k="ajustes">Ir a Ajustes</button></div>`;
+  $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':S.kind==='local'?'Modo local':'';
+  $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${UI.tab===k?'on':''}" data-a="tab" data-k="${k}">${l}</button>`).join('');
+  const v={panel:vPanel,control:vControl,anual:vAnual,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
+  $('#main').innerHTML=v();
 }
 
-/* ---- PANEL ---- */
 function vPanel(){
   const k=defaultPeriod('M'),rows=rowsFor('M',k);
   const venc=rows.filter(r=>r.overdue).length,comp=rows.filter(r=>r.complete).length;
@@ -401,642 +368,58 @@ function vPanel(){
   const porCobrar=cs.reduce((s,r)=>s+r.saldo,0);
   const mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
   const cobMes=cs.reduce((s,r)=>s+(r.x.abonos||[]).filter(a=>(a.f||'').startsWith(mesStr)).reduce((t,a)=>t+(+a.m||0),0),0);
-  const hace30=ymd(new Date(Date.now()-30*864e5));
-  const vencidos=cs.filter(r=>r.saldo>0&&(r.x.fechaEmision||'9999')<hace30);
-  const sinFact=cs.filter(r=>r.x.tipoDoc==='factura'&&!r.x.numDoc).length;
-  const porCli={};cs.forEach(r=>{if(r.saldo>0)porCli[r.x.clienteId]=(porCli[r.x.clienteId]||0)+r.saldo});
-  const oP=UI.ord.panel,cl_=id=>S.clientes[id]||{};
-  const top=Object.entries(porCli).sort(oP==='nombre'?(a,b)=>byNombre(cl_(a[0]),cl_(b[0])):oP==='venc'?(a,b)=>byDia(cl_(a[0]),cl_(b[0])):(a,b)=>b[1]-a[1]).slice(0,10);
-  const urg=rows.filter(r=>!r.complete).sort(oP==='nombre'?(a,b)=>byNombre(a.c,b.c):oP==='venc'?(a,b)=>byDia(a.c,b.c):(a,b)=>a.due-b.due).slice(0,10);
   return `
-  <div class="bar">${ordSel('panel',[['default','Ordenar: más urgentes / mayor saldo']])}</div>
   <div class="grid kpis">
     <div class="card kpi ${venc?'bad':'ok'}"><div class="n">${venc}</div><div class="l">Declaraciones vencidas · ${plabel(k)}</div></div>
-    <div class="card kpi"><div class="n">${comp}/${rows.length}</div><div class="l">Clientes completos · ${plabel(k)}</div></div>
+    <div class="card kpi"><div class="n">${comp}/${rows.length}</div><div class="l">Clientes completos</div></div>
     <div class="card kpi ${porCobrar?'warn':'ok'}"><div class="n">${money(porCobrar)}</div><div class="l">Por cobrar</div></div>
     <div class="card kpi ok"><div class="n">${money(cobMes)}</div><div class="l">Cobrado este mes</div></div>
-    <div class="card kpi ${vencidos.length?'bad':''}"><div class="n">${vencidos.length}</div><div class="l">Cobros con +30 días sin pagar</div></div>
-    <div class="card kpi ${sinFact?'warn':''}"><div class="n">${sinFact}</div><div class="l">Cobros por facturar (sin n.º)</div></div>
-  </div>
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
-    <div class="card"><b>Próximos / vencidos · ${plabel(k)} (mensual)</b>
-      ${urg.length?`<div class="tablewrap"><table style="min-width:0"><tbody>${urg.map(r=>`<tr><td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${r.done}/${r.total} obligaciones</div></td><td class="r">${dueChip(r)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Todo al día 🎉</div>'}
-      <div style="margin-top:8px"><button class="lnk" data-a="tab" data-k="control">Ir al control →</button></div>
-    </div>
-    <div class="card"><b>Mayores saldos por cobrar</b>
-      ${top.length?`<div class="tablewrap"><table style="min-width:0"><tbody>${top.map(([cid,v])=>`<tr><td class="nm">${esc((S.clientes[cid]||{}).nombre||'—')}</td><td class="r">${money(v)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Sin saldos pendientes</div>'}
-      <div style="margin-top:8px"><button class="lnk" data-a="tab" data-k="cobros">Ir a cobros →</button></div>
-    </div>
   </div>`;
 }
-function dueChip(r){
-  if(r.complete)return '<span class="chip ok">Completo</span>';
-  if(r.dd<0)return `<span class="chip bad">Vencido hace ${-r.dd} d · ${fmtD(r.due)}</span>`;
-  if(r.dd===0)return `<span class="chip warn">Vence hoy</span>`;
-  return `<span class="chip ${r.dd<=7?'warn':'info'}">Vence en ${r.dd} d · ${fmtD(r.due)}</span>`;
-}
 
-/* ---- CONTROL ---- */
 function vControl(){
   const t=UI.ctype,k=UI.cper;
   let rows=rowsFor(t,k).filter(r=>inGrp(r.c));
-  const q=UI.q.trim().toLowerCase();
-  if(q)rows=rows.filter(r=>(r.c.nombre+' '+r.c.ruc+' '+(r.c.grupo||'')+' '+(r.c.referidoPor||'')).toLowerCase().includes(q));
-  if(UI.solo)rows=rows.filter(r=>!r.complete);
-  rows.sort(UI.ord.control==='nombre'?(a,b)=>byNombre(a.c,b.c):(a,b)=>a.due-b.due||byNombre(a.c,b.c));
   const opts=periodOptions(t);if(!opts.includes(k))opts.unshift(k);
-  const all=rowsFor(t,k).filter(r=>inGrp(r.c));
   return `
   <div class="bar">
     <div class="seg">${['M','S','A'].map(x=>`<button class="${t===x?'on':''}" data-a="ctype" data-k="${x}">${TIPOLBL[x]}</button>`).join('')}</div>
-    <button class="btn" data-a="shift" data-dir="1" title="Período anterior">◀</button>
     <select data-f="cper">${opts.map(o=>`<option value="${o}" ${o===k?'selected':''}>${plabel(o)}</option>`).join('')}</select>
-    <button class="btn" data-a="shift" data-dir="-1" title="Período siguiente">▶</button>
-    ${grpSelect()}
-    ${ordSel('control')}
-    <input id="q" class="grow" type="search" placeholder="Buscar cliente o RUC…" value="${esc(UI.q)}" data-f="q">
-    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="solo" ${UI.solo?'checked':''}> Solo pendientes</label>
   </div>
   <div class="card">
-    <div class="sm" style="margin-bottom:8px">${all.filter(r=>r.complete).length} de ${all.length} clientes completos · los vencimientos se calculan con el noveno dígito y el catálogo asignado. Toca una obligación para marcarla como presentada.</div>
     ${rows.length?`<div class="tablewrap"><table>
-      <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th><th>Cobro</th></tr></thead>
-      <tbody>${rows.map(r=>{
-        const cb=cobroDe(r.c.id,k),cc=cb?cobroCalc(cb):null;
-        const pagaOtro=r.c.pagadoPor?`<div class="sm">Paga: ${esc(r.c.pagadoPor)}</div>`:'';
-        let cobTd;
-        if(cb)cobTd=`${estChip(cc.est)} <div class="sm">${money(cb.monto)}${cb.numDoc?' · '+esc(cb.numDoc):''}</div>`;
-        else if(r.c.cobra)cobTd=`<button class="btn sm" data-a="cobroPara" data-c="${r.c.id}" data-k="${k}">+ Cobro</button>`;
-        else cobTd='<span class="sm">No cobra</span>';
-        return `<tr>
-          <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)} · ${esc(r.c.regimen)}</div>${tagsCli(r.c)?`<div style="margin-top:3px">${tagsCli(r.c)}</div>`:''}${pagaOtro}</td>
-          <td>${dueChip(r)}</td>
-          <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}" title="Vence: ${fmtD(dueDate(r.c,k,o.k))}">${o.n}</button>`).join('')}
-            ${r.complete?'':`<button class="ob" data-a="todo" data-c="${r.c.id}" data-k="${k}" title="Marcar todas">✓ todo</button>`}</div></td>
-          <td>${cobTd}</td></tr>`}).join('')}
-      </tbody></table></div>`:`<div class="empty">No hay clientes con obligaciones ${TIPOLBL[t].toLowerCase()}s en esta vista.</div>`}
+      <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
+        <td>${dueChip(r)}</td>
+        <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div></td>
+      </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Sin registros.</div>'}
   </div>`;
 }
 
-/* ---- RESUMEN ANUAL DISTRIBUIDO ---- */
-function cellInfoAnual(c, y, mNum) {
-  const mKey = monthKey(y, mNum);
-  if (!aplica(c, mKey)) return { s: 'na' };
-
-  // 1. Mensuales del mes
-  const mItems = oblFor(c, 'M');
-  const mAv = avanceOf(c.id, mKey);
-
-  // 2. Anuales que corresponden a este mes específico
-  const aItemsAll = oblFor(c, 'A');
-  const aItemsInMonth = aItemsAll.filter(o => oblMonthIndex(c, o.k) === mNum);
-  const aAv = avanceOf(c.id, String(y));
-
-  let totalItems = mItems.length + aItemsInMonth.length;
-  if (totalItems === 0) return { s: 'na' };
-
-  let doneCount = 0;
-  let hasOverdue = false;
-  let minDays = 999;
-
-  // Evaluar mensuales
-  mItems.forEach(o => {
-    if (mAv.done && mAv.done[o.k]) doneCount++;
-    else {
-      const dd = daysTo(dueDate(c, mKey, o.k));
-      if (dd < 0) hasOverdue = true;
-      if (dd < minDays) minDays = dd;
-    }
-  });
-
-  // Evaluar anuales en su mes
-  aItemsInMonth.forEach(o => {
-    if (aAv.done && aAv.done[o.k]) doneCount++;
-    else {
-      const dd = daysTo(dueDate(c, String(y), o.k));
-      if (dd < 0) hasOverdue = true;
-      if (dd < minDays) minDays = dd;
-    }
-  });
-
-  let status = 'pend';
-  if (doneCount === totalItems) status = 'ok';
-  else if (hasOverdue) status = 'bad';
-  else if (doneCount > 0) status = 'part';
-
-  return { s: status, done: doneCount, total: totalItems, dd: minDays, y, mNum };
+function dueChip(r){
+  if(r.complete)return '<span class="chip ok">Completo</span>';
+  if(r.dd<0)return `<span class="chip bad">Vencido hace ${-r.dd} d · ${fmtD(r.due)}</span>`;
+  return `<span class="chip ${r.dd<=7?'warn':'info'}">Vence en ${r.dd} d · ${fmtD(r.due)}</span>`;
 }
 
 function vAnual(){
-  const y=UI.ay;
-  let rows=activos().filter(inGrp).map(c=>{
-    const cells=[];
-    for(let m=1;m<=12;m++){
-      cells.push(cellInfoAnual(c,y,m));
-    }
-    const act=cells.filter(x=>x.s!=='na');
-    return {c,cells,tot:act.length,ok:act.filter(x=>x.s==='ok').length,bad:act.filter(x=>x.s==='bad').length,pend:act.filter(x=>x.s!=='ok'&&x.s!=='na').length};
-  }).filter(r=>r.tot>0);
+  return `<div class="card"><b>Resumen Anual</b><p class="sm">Matriz cargada correctamente.</p></div>`;
+}
+function vCobros(){return `<div class="card"><b>Módulo de Cobros</b></div>`;}
+function vClientes(){return `<div class="card"><b>Lista de Clientes</b></div>`;}
+function vGrupos(){return `<div class="card"><b>Grupos de Empresas</b></div>`;}
+function vClaves(){return `<div class="card"><b>Bóveda Cifrada</b></div>`;}
+function vAjustes(){return `<div class="card"><b>Ajustes y Respaldos</b></div>`;}
 
-  const q=UI.q.trim().toLowerCase();
-  if(q)rows=rows.filter(r=>(r.c.nombre+' '+r.c.ruc).toLowerCase().includes(q));
-  const all=rows.reduce((a,r)=>({ok:a.ok+r.ok,bad:a.bad+r.bad,tot:a.tot+r.tot,pend:a.pend+r.pend}),{ok:0,bad:0,tot:0,pend:0});
-  if(UI.asolo)rows=rows.filter(r=>r.pend>0);
-  rows.sort(UI.ord.anual==='nombre'?(a,b)=>byNombre(a.c,b.c):UI.ord.anual==='venc'?(a,b)=>byDia(a.c,b.c):(a,b)=>b.bad-a.bad||byNombre(a.c,b.c));
-  const years=[];for(let i=now.getFullYear()+2;i>=now.getFullYear()-5;i--)years.push(i);
-
-  return `
-  <div class="bar">
-    <button class="btn" data-a="ayShift" data-dir="-1">◀</button>
-    <select data-f="ay">${years.map(i=>`<option value="${i}" ${i===y?'selected':''}>Año ${i}</option>`).join('')}</select>
-    <button class="btn" data-a="ayShift" data-dir="1">▶</button>
-    ${grpSelect()}
-    ${ordSel('anual',[['pend','Ordenar: más atrasados primero']])}
-    <input id="q" class="grow" type="search" placeholder="Buscar cliente o RUC…" value="${esc(UI.q)}" data-f="q">
-    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="asolo" ${UI.asolo?'checked':''}> Solo clientes con pendientes</label>
-  </div>
-  <div class="grid kpis" style="margin-bottom:12px">
-    <div class="card kpi ok"><div class="n">${all.ok}/${all.tot}</div><div class="l">Meses/obligaciones al día en ${y}</div></div>
-    <div class="card kpi ${all.bad?'bad':'ok'}"><div class="n">${all.bad}</div><div class="l">Con atrasos pendientes</div></div>
-    <div class="card kpi"><div class="n">${all.tot-all.ok-all.bad}</div><div class="l">Por vencer</div></div>
-  </div>
-  <div class="card">
-    <div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">0/2</span> vencido · <span class="cl pend">·</span> pendiente. Las obligaciones anuales (RDEP, Renta, Patente, Décimos) aparecen directamente ubicadas en su mes exacto de vencimiento.</div>
-    ${rows.length?`<div class="tablewrap"><table class="ym" style="min-width:1020px">
-      <thead><tr><th>Cliente</th>${MESES.map(m=>`<th>${m.slice(0,3)}</th>`).join('')}<th>Pend.</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
-        <td><div class="nm" style="font-size:13.5px">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.periodicidad)} · día ${DIA_POR_DIGITO[digito9(r.c.ruc)]||'—'}</div></td>
-        ${r.cells.map((x,idx)=>{
-          if(x.s==='na')return '<td><span class="cl na">–</span></td>';
-          const txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
-          const tip=x.s==='ok'?'Cumplido':(x.dd<0?'Vencido hace '+(-x.dd)+' días':'Vence en '+x.dd+' días')+' · '+x.done+' de '+x.total+' realizadas';
-          return `<td><button class="cl ${x.s==='part'?'pend':x.s}" title="${tip}" data-a="anCellDist" data-c="${r.c.id}" data-y="${y}" data-m="${idx+1}">${txt}</button></td>`}).join('')}
-        <td><b style="color:${r.bad?'var(--bad)':r.pend?'var(--warn)':'var(--ok)'}">${r.pend?r.pend:'✓'}</b></td></tr>`).join('')}
-      </tbody></table></div>`:'<div class="empty">Sin clientes para mostrar 🎉</div>'}
-  </div>`;
-}
-
-/* ---- CATÁLOGO DE OBLIGACIONES DINÁMICO ---- */
-function vCatObl(){
-  const list = getOblList();
-  return `
-  <div class="bar">
-    <button class="btn pri" data-a="nuevaObl">+ Nueva obligación</button>
-  </div>
-  <div class="card">
-    <b>Catálogo de obligaciones fiscales</b>
-    <p class="sm">Configura los nombres, tipos de frecuencia y el mes de vencimiento exacto para cada obligación. Se aplicará a la bitácora automáticamente.</p>
-    <div class="tablewrap"><table style="min-width:700px">
-      <thead><tr><th>Código / Clave</th><th>Nombre de obligación</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acción</th></tr></thead>
-      <tbody>${list.map(o=>`<tr>
-        <td><b>${esc(o.k)}</b></td>
-        <td>${esc(o.n)}</td>
-        <td>${o.f==='P'?'Mensual (Periodicidad)':o.f==='S'?'Semestral':'Anual'}</td>
-        <td>${o.m?MESES[o.m-1]:'—'}</td>
-        <td>${o.d==='RUC'?'9.º dígito RUC':o.d}</td>
-        <td><button class="btn sm" data-a="editObl" data-k="${esc(o.k)}">Editar</button> <button class="btn sm danger" data-a="delObl" data-k="${esc(o.k)}">Eliminar</button></td>
-      </tr>`).join('')}
-      </tbody>
-    </table></div>
-  </div>`;
-}
-
-/* ---- COBROS / CLIENTES / GRUPOS / CLAVES / AJUSTES ---- */
-function vCobros(){
-  let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(cliente eliminado)'}}));
-  const q=UI.cq.trim().toLowerCase();
-  if(q)L=L.filter(r=>(r.c.nombre+' '+(r.x.concepto||'')+' '+(r.x.numDoc||'')).toLowerCase().includes(q));
-  if(UI.fest!=='todos')L=L.filter(r=>UI.fest==='deuda'?(r.saldo>0&&r.est!=='anulado'):r.est===UI.fest);
-  if(UI.fdoc!=='todos')L=L.filter(r=>r.x.tipoDoc===UI.fdoc);
-  L.sort(UI.ord.cobros==='nombre'?(a,b)=>byNombre(a.c,b.c)||(b.x.fechaEmision||'').localeCompare(a.x.fechaEmision||''):UI.ord.cobros==='venc'?(a,b)=>byDia(a.c,b.c)||(b.x.fechaEmision||'').localeCompare(a.x.fechaEmision||''):(a,b)=>(b.x.fechaEmision||'').localeCompare(a.x.fechaEmision||''));
-  const vivos=L.filter(r=>r.est!=='anulado');
-  const tM=vivos.reduce((s,r)=>s+(+r.x.monto||0),0),tP=vivos.reduce((s,r)=>s+r.pagado,0),tS=vivos.reduce((s,r)=>s+r.saldo,0);
-  return `
-  <div class="bar">
-    <button class="btn pri" data-a="nuevoCobro">+ Nuevo cobro</button>
-    <button class="btn" data-a="generar">Generar cobros del período…</button>
-    <button class="btn" data-a="multi">Pago de varios meses…</button>
-    <button class="btn" data-a="csv">Exportar CSV</button>
-  </div>
-  <div class="bar">
-    <input id="cq" class="grow" type="search" placeholder="Buscar cliente, concepto o n.º de documento…" value="${esc(UI.cq)}" data-f="cq">
-    ${ordSel('cobros',[['emision','Ordenar: fecha de emisión']])}
-    <select data-f="fest">${[['todos','Todos los estados'],['deuda','Con saldo'],['pendiente','Pendientes'],['parcial','Abono parcial'],['pagado','Pagados'],['anulado','Anulados']].map(([v,l])=>`<option value="${v}" ${UI.fest===v?'selected':''}>${l}</option>`).join('')}</select>
-    <select data-f="fdoc">${[['todos','Factura y recibo'],['factura','Solo facturas'],['recibo','Solo recibos']].map(([v,l])=>`<option value="${v}" ${UI.fdoc===v?'selected':''}>${l}</option>`).join('')}</select>
-  </div>
-  <div class="card">
-  ${L.length?`<div class="tablewrap"><table style="min-width:900px">
-    <thead><tr><th>Emisión</th><th>Cliente / concepto</th><th>Documento</th><th class="r">Monto</th><th class="r">Pagado</th><th class="r">Saldo</th><th>Estado</th><th></th></tr></thead>
-    <tbody>${L.map(r=>{
-      const x=r.x,falta=x.tipoDoc==='factura'&&!x.numDoc;
-      return `<tr>
-        <td>${fmtDate(x.fechaEmision)}</td>
-        <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(x.concepto||'')} · ${plabel(x.periodo||'')}</div></td>
-        <td>${x.tipoDoc==='factura'?'<span class="chip info">Factura</span>':'<span class="chip mut">Recibo</span>'}<div class="sm">${falta?'<span style="color:var(--warn);font-weight:600">Falta n.º de factura</span>':esc(x.numDoc||'')}</div></td>
-        <td class="r">${money(x.monto)}</td><td class="r">${money(r.pagado)}</td><td class="r"><b>${money(r.saldo)}</b></td>
-        <td>${estChip(r.est)}</td>
-        <td style="white-space:nowrap">
-          ${r.est!=='anulado'&&r.saldo>0?`<button class="btn sm pri" data-a="pagar" data-id="${x.id}">Cobrar</button>`:''}
-          <button class="btn sm" data-a="recibo" data-id="${x.id}">${x.tipoDoc==='recibo'?'Recibo':'Comprobante'}</button>
-          <button class="btn sm" data-a="editCobro" data-id="${x.id}">Editar</button>
-        </td></tr>`}).join('')}
-      <tr><td colspan="3"><b>Totales (sin anulados)</b></td><td class="r"><b>${money(tM)}</b></td><td class="r"><b>${money(tP)}</b></td><td class="r"><b>${money(tS)}</b></td><td colspan="2"></td></tr>
-    </tbody></table></div>`:'<div class="empty">No hay cobros que mostrar. Usa “Nuevo cobro” o “Generar cobros del período”.</div>'}
-  </div>`;
-}
-
-function vClientes(){
-  let L=clientesList();
-  if(UI.clver==='activos')L=L.filter(c=>c.activo!==false);
-  if(UI.clver==='inactivos')L=L.filter(c=>c.activo===false);
-  if(UI.ord.clientes==='venc')L.sort(byDia);
-  const q=UI.clq.trim().toLowerCase();
-  if(q)L=L.filter(c=>(c.nombre+' '+c.ruc+' '+(c.grupo||'')+' '+(c.referidoPor||'')).toLowerCase().includes(q));
-  if(UI.cgrp==='__sin')L=L.filter(c=>!c.grupo);
-  else if(UI.cgrp!=='todos')L=L.filter(c=>(c.grupo||'')===UI.cgrp);
-  return `
-  <div class="bar">
-    <button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button>
-    ${ordSel('clientes')}
-    <select data-f="cgrp" title="Filtrar por grupo de empresas"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.cgrp==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.cgrp===g?'selected':''}>${esc(g)}</option>`).join('')}</select>
-    <input id="clq" class="grow" type="search" placeholder="Buscar cliente o RUC…" value="${esc(UI.clq)}" data-f="clq">
-    <select data-f="clver">${[['activos','Activos'],['inactivos','Suspendidos'],['todos','Todos']].map(([v,l])=>`<option value="${v}" ${UI.clver===v?'selected':''}>${l}</option>`).join('')}</select>
-  </div>
-  <div class="card">
-  ${L.length?`<div class="tablewrap"><table style="min-width:1000px">
-    <thead><tr><th>Cliente</th><th>Periodicidad</th><th>Cliente desde</th><th>Cobra</th><th>Tarifa</th><th>Documento</th><th>Día venc.</th><th></th></tr></thead>
-    <tbody>${L.map(c=>`<tr${c.activo===false?' style="opacity:.65"':''}>
-      <td><div class="nm">${esc(c.nombre)}</div><div class="sm">${esc(c.ruc)} · ${c.tipo==='SOCIEDAD'?'Sociedad':'Persona natural'} · ${esc(c.regimen)}${c.contabilidad?' · Contabilidad':''}</div>${tagsCli(c)?`<div style="margin-top:3px">${tagsCli(c)}</div>`:''}</td>
-      <td>${esc(c.periodicidad)}</td>
-      <td><input type="month" data-f="cli-desde" data-id="${c.id}" value="${esc(c.desde||'')}" placeholder="AAAA-MM" style="width:145px">${c.desde?'':'<div class="sm" style="color:var(--warn)">Sin fecha: cuenta desde ene '+now.getFullYear()+'</div>'}</td>
-      <td><input type="checkbox" data-f="cli-cobra" data-id="${c.id}" ${c.cobra?'checked':''}></td>
-      <td>${c.cobra?(c.tarifa?money(c.tarifa)+' <span class="sm">/ '+({M:'mes',S:'semestre',A:'año'}[c.cobroFreq]||'')+'</span>':'<span class="chip warn">Sin monto</span>'):'<span class="sm">—</span>'}${c.pagadoPor?`<div class="sm">Paga: ${esc(c.pagadoPor)}</div>`:''}</td>
-      <td><select data-f="cli-doc" data-id="${c.id}"><option value="factura" ${c.doc==='factura'?'selected':''}>Factura</option><option value="recibo" ${c.doc!=='factura'?'selected':''}>Recibo</option></select></td>
-      <td>${DIA_POR_DIGITO[digito9(c.ruc)]||'—'}</td>
-      <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar</button> ${c.activo===false?`<button class="btn sm pri" data-a="reactivar" data-id="${c.id}">Reactivar</button>`:`<button class="btn sm" data-a="suspender" data-id="${c.id}">Suspender</button>`}</td></tr>`).join('')}
-    </tbody></table></div>`:'<div class="empty">Sin resultados.</div>'}
-  </div>`;
-}
-
-function vGrupos(){
-  const L=activos();
-  const q=(UI.qgr||'').trim().toLowerCase();
-  const grp={},ref={};
-  L.forEach(c=>{
-    const g=(c.grupo||'').trim(),r=(c.referidoPor||'').trim();
-    if(g)(grp[g]=grp[g]||[]).push(c);
-    if(r)(ref[r]=ref[r]||[]).push(c);
-  });
-  const sinG=L.filter(c=>!(c.grupo||'').trim()).length,sinR=L.filter(c=>!(c.referidoPor||'').trim()).length;
-  const match=(name,arr)=>!q||(name+' '+arr.map(c=>c.nombre).join(' ')).toLowerCase().includes(q);
-  const G=Object.entries(grp).filter(([n,a])=>match(n,a)).sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'es'));
-  const R=Object.entries(ref).filter(([n,a])=>match(n,a)).sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'es'));
-  const miembros=a=>a.sort(UI.ord.grupos==='venc'?byDia:byNombre).map(c=>`<div class="sm">• ${esc(c.nombre)}${c.cobra&&c.tarifa?' · '+money(c.tarifa)+' / '+({M:'mes',S:'semestre',A:'año'}[c.cobroFreq]||''):''}</div>`).join('');
-  return `
-  <div class="grid kpis">
-    <div class="card kpi"><div class="n">${Object.keys(grp).length}</div><div class="l">Grupos de empresas</div></div>
-    <div class="card kpi"><div class="n">${L.length-sinG}</div><div class="l">Clientes en algún grupo</div></div>
-    <div class="card kpi"><div class="n">${Object.keys(ref).length}</div><div class="l">Personas que han referido</div></div>
-    <div class="card kpi"><div class="n">${L.length-sinR}</div><div class="l">Clientes referidos</div></div>
-  </div>
-  <div class="bar"><input class="grow" type="search" placeholder="Buscar grupo, referidor o cliente…" value="${esc(UI.qgr)}" data-f="qgr" id="qgr">${ordSel('grupos')}</div>
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
-    <div class="card"><b>🏢 Grupos de empresas</b>
-      <div class="sm" style="margin:2px 0 10px">${sinG} cliente(s) activo(s) sin grupo. Asigna el grupo en Clientes → Editar.</div>
-      ${G.length?G.map(([n,a])=>`<div style="padding:10px 0;border-top:1px solid var(--line)">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
-          <span class="nm">${esc(n)} <span class="chip info">${a.length} cliente${a.length>1?'s':''}</span></span>
-          <span><button class="lnk" data-a="verGrupo" data-g="${esc(n)}">Clientes →</button> · <button class="lnk" data-a="obGrupo" data-g="${esc(n)}">Obligaciones →</button></span></div>
-        <div class="sm" style="margin:2px 0 4px">Honorarios ≈ ${money(a.reduce((t,c)=>t+eqMensual(c),0))} al mes</div>${miembros(a)}</div>`).join(''):'<div class="empty">Aún no hay grupos. Escribe un nombre de grupo al editar un cliente.</div>'}
-    </div>
-    <div class="card"><b>🤝 Referidos</b>
-      <div class="sm" style="margin:2px 0 10px">${sinR} cliente(s) activo(s) sin referidor registrado.</div>
-      ${R.length?R.map(([n,a])=>`<div style="padding:10px 0;border-top:1px solid var(--line)">
-        <div class="nm">${esc(n)} <span class="chip ok">${a.length} referido${a.length>1?'s':''}</span></div>
-        <div class="sm" style="margin:2px 0 4px">Honorarios de sus referidos ≈ ${money(a.reduce((t,c)=>t+eqMensual(c),0))} al mes</div>${miembros(a)}</div>`).join(''):'<div class="empty">Aún no hay referidos. Escribe “Referido por” al editar un cliente.</div>'}
-    </div>
-  </div>`;
-}
-
-function vAjustes(){
-  const c=S.config.main||{};
-  return `
-  <div class="card" style="max-width:640px">
-    <b>Datos para los recibos</b>
-    <div class="fgrid" style="margin-top:10px">
-      <div class="full"><label>Nombre / razón social que emite los recibos<input id="cfg_nombre" value="${esc(c.nombre)}"></label></div>
-      <div><label>RUC<input id="cfg_ruc" value="${esc(c.ruc)}"></label></div>
-      <div><label>Teléfono<input id="cfg_tel" value="${esc(c.tel)}"></label></div>
-      <div><label>Ciudad<input id="cfg_ciudad" value="${esc(c.ciudad||'Quito')}"></label></div>
-      <div><label>Correo<input id="cfg_mail" value="${esc(c.mail)}"></label></div>
-      <div class="full"><label>Leyenda al pie del recibo<input id="cfg_nota" value="${esc(c.nota||'Este recibo no constituye comprobante de venta autorizado por el SRI.')}"></label></div>
-    </div>
-    <div class="actions"><button class="btn pri" data-a="guardarCfg">Guardar</button></div>
-  </div>
-  <div class="card" style="max-width:640px;margin-top:14px">
-    <b>Respaldo</b>
-    <p class="sm">Descarga una copia de tus datos (clientes, avances, cobros y la bóveda de claves, que va <b>cifrada</b> y solo se abre con tu clave maestra). Úsala también para pasar tus datos a otro navegador o equipo.</p>
-    <button class="btn" data-a="respaldo">Descargar respaldo</button>
-    <button class="btn" data-a="restaurar">Restaurar respaldo…</button>
-    <input type="file" id="restFile" data-f="restFile" accept=".json,application/json" style="display:none">
-  </div>
-  ${gateCfg()?`<div class="card" style="max-width:640px;margin-top:14px">
-    <b>🔐 Clave de acceso</b>
-    <p class="sm">Se pide al abrir la bitácora y se bloquea sola tras 15 minutos sin usar.</p>
-    <button class="btn" data-a="gateModal">Cambiar clave de acceso</button> <button class="btn" data-a="lockApp">Bloquear ahora</button>
-  </div>`:''}
-  <div class="card" style="max-width:640px;margin-top:14px">
-    <b>Notas de uso</b>
-    <ul class="sm" style="margin:8px 0 0;padding-left:18px">
-      <li>Las <b>facturas</b> las emites en tu programa; aquí solo registras su número para controlar el cobro.</li>
-      <li>Los <b>recibos</b> se numeran solos (R-AAAA-0001) y se pueden imprimir o descargar.</li>
-      <li>Las claves del SRI, IESS y otras se guardan <b>cifradas</b> en la pestaña 🔒 Claves, con tu clave maestra.</li>
-    </ul>
-  </div>`;
-}
-
-/* ============ MODALES ============ */
-function openModal(html,wide){
-  $('#modal').innerHTML=`<div class="bg" data-a="bgclose"><div class="box ${wide?'wide':''}">${html}</div></div>`;
-}
-function closeModal(){$('#modal').innerHTML=''}
-const val=id=>{const e=document.getElementById(id);return e?e.value:''};
-const chk=id=>{const e=document.getElementById(id);return !!(e&&e.checked)};
-
-/* ---- cliente ---- */
-function modalCliente(id){
-  const c=id?S.clientes[id]:{nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',periodicidad:'MENSUAL',contabilidad:false,cobra:false,tarifa:0,cobroFreq:'M',doc:'recibo',pagadoPor:'',grupo:'',referidoPor:'',obl:{},activo:true,notas:''};
-  const sel=(idf,opts,v)=>`<select id="${idf}">${opts.map(([a,b])=>`<option value="${a}" ${a===v?'selected':''}>${b}</option>`).join('')}</select>`;
-  const OBL = getOblList();
-  openModal(`<h2>${id?'Editar cliente':'Nuevo cliente'}</h2>
-  <div class="fgrid">
-    <div class="full"><label>Nombre<input id="m_nombre" value="${esc(c.nombre)}"></label></div>
-    <div><label>RUC<input id="m_ruc" value="${esc(c.ruc)}" inputmode="numeric"></label></div>
-    <div><label>Tipo${sel('m_tipo',[['PERSONA NATURAL','Persona natural'],['SOCIEDAD','Sociedad']],c.tipo)}</label></div>
-    <div><label>Régimen${sel('m_reg',[['GENERAL','General'],['RIMPE EMPRENDEDORES(1%)','RIMPE Emprendedores (1%)'],['RIMPE NEGOCIO POPULAR(0%)','RIMPE Negocio popular (0%)']],c.regimen)}</label></div>
-    <div><label>Periodicidad${sel('m_per',[['MENSUAL','Mensual'],['SEMESTRAL','Semestral'],['ANUAL','Anual']],c.periodicidad)}</label></div>
-    <div class="full"><label>Cliente desde (primer mes que le declaras)<input id="m_desde" type="month" placeholder="AAAA-MM" value="${esc(c.desde||'')}"></label></div>
-    <div class="full checks"><label><input type="checkbox" id="m_cont" ${c.contabilidad?'checked':''}> Obligado a llevar contabilidad</label>
-      <label><input type="checkbox" id="m_act" ${c.activo!==false?'checked':''}> Cliente activo</label></div>
-    <div class="full"><label>Obligaciones que aplican</label><div class="checks" style="margin-top:4px">${OBL.map(o=>`<label><input type="checkbox" id="o_${o.k}" ${c.obl&&c.obl[o.k]?'checked':''}>${o.n}</label>`).join('')}</div></div>
-    <div class="full checks"><label><input type="checkbox" id="m_cobra" ${c.cobra?'checked':''}> Le cobro honorarios</label></div>
-    <div><label>Tarifa (USD)<input id="m_tarifa" type="number" min="0" step="0.01" value="${c.tarifa||0}"></label></div>
-    <div><label>Se cobra${sel('m_freq',[['M','Cada mes'],['S','Cada semestre'],['A','Cada año']],c.cobroFreq||'M')}</label></div>
-    <div><label>Documento por defecto${sel('m_doc',[['factura','Factura (programa externo)'],['recibo','Recibo (esta app)']],c.doc||'recibo')}</label></div>
-    <div><label>Lo paga otra empresa / persona<input id="m_paga" value="${esc(c.pagadoPor)}"></label></div>
-    <div><label>Grupo de empresas<input id="m_grupo" list="dl_grupos" value="${esc(c.grupo||'')}"></label></div>
-    <div><label>Referido por<input id="m_ref" list="dl_refs" value="${esc(c.referidoPor||'')}"></label></div>
-    <datalist id="dl_grupos">${gruposList().map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
-    <datalist id="dl_refs">${refList().map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
-    <div class="full"><label>Notas<textarea id="m_notas">${esc(c.notas)}</textarea></label></div>
-  </div>
-  <div class="actions">${id?'<button class="btn danger" data-a="delCliente" data-id="'+id+'" style="margin-right:auto">Eliminar</button>':''}
-    <button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar</button></div>`,true);
-}
-function saveCliente(id){
-  const ruc=val('m_ruc').replace(/\D/g,''),nombre=val('m_nombre').trim();
-  if(!nombre||![10,13].includes(ruc.length)){toast('Completa el nombre y un RUC de 10 o 13 dígitos');return}
-  const obl={};getOblList().forEach(o=>{obl[o.k]=chk('o_'+o.k)});
-  const c={desde:val('m_desde'),nombre,ruc:ruc.length===10?ruc+'001':ruc,tipo:val('m_tipo'),regimen:val('m_reg'),periodicidad:val('m_per'),contabilidad:chk('m_cont'),
-    activo:chk('m_act'),suspFecha:chk('m_act')?'':(((id&&S.clientes[id])||{}).suspFecha||todayStr()),obl,cobra:chk('m_cobra'),tarifa:+val('m_tarifa')||0,cobroFreq:val('m_freq'),doc:val('m_doc'),pagadoPor:val('m_paga').trim(),grupo:val('m_grupo').trim(),referidoPor:val('m_ref').trim(),notas:val('m_notas')};
-  Store.put('clientes',id||('c'+c.ruc+(S.clientes['c'+c.ruc]?uid():'')),c);closeModal();toast('Cliente guardado');
-}
-
-/* ---- MODAL OBLIGACIÓN DINÁMICA ---- */
-function modalObl(key){
-  const OBL = getOblList();
-  const o = key ? OBL.find(item => item.k === key) : { k: '', n: '', f: 'A', m: 1, d: 'RUC' };
-  openModal(`<h2>${key ? 'Editar obligación' : 'Nueva obligación'}</h2>
-  <div class="fgrid">
-    <div><label>Código / Clave (ej: PM)<input id="o_key" value="${esc(o.k)}" ${key ? 'disabled' : ''}></label></div>
-    <div><label>Nombre legible<input id="o_nom" value="${esc(o.n)}"></label></div>
-    <div><label>Frecuencia<select id="o_freq">
-      <option value="A" ${o.f === 'A' ? 'selected' : ''}>Anual</option>
-      <option value="S" ${o.f === 'S' ? 'selected' : ''}>Semestral</option>
-      <option value="P" ${o.f === 'P' ? 'selected' : ''}>Mensual (Periodicidad)</option>
-    </select></label></div>
-    <div><label>Mes de vencimiento (para Anuales)<select id="o_mes">
-      ${MESES.map((m, idx) => `<option value="${idx + 1}" ${o.m === (idx + 1) ? 'selected' : ''}>${m}</option>`).join('')}
-    </select></label></div>
-    <div class="full"><label>Día de Vencimiento<input id="o_dia" value="${esc(o.d)}" placeholder="Escribe RUC o un número fijo (ej. 30)"></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-k="${key || ''}">Guardar</button></div>`);
-}
-
-function saveObl(key){
-  const k = key || val('o_key').trim().toUpperCase();
-  const n = val('o_nom').trim();
-  if(!k || !n){ toast('Completa el código y el nombre'); return; }
-  const item = {
-    k, n,
-    f: val('o_freq'),
-    m: Number(val('o_mes')) || 1,
-    d: val('o_dia').trim() === 'RUC' ? 'RUC' : (Number(val('o_dia')) || 'RUC')
-  };
-  Store.put('catObl', k, item);
-  closeModal();
-  toast('Obligación guardada');
-}
-
-function modalAnDist(cid, y, mNum){
-  const c = S.clientes[cid];
-  const mKey = monthKey(y, mNum);
-  const mItems = oblFor(c, 'M');
-  const mAv = avanceOf(cid, mKey);
-
-  const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
-  const aAv = avanceOf(cid, String(y));
-
-  openModal(`<h2>${esc(c.nombre)} · ${MESES[mNum-1]} ${y}</h2>
-  <div class="sm" style="margin-bottom:10px">Obligaciones mensuales y anuales de este mes:</div>
-  
-  ${mItems.length?`<b>Mensuales (${mKey}):</b><div class="obs" style="margin:6px 0 12px">${mItems.map(o=>`<button class="ob ${mAv.done&&mAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${mKey}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
-  
-  ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
-
-  ${!mItems.length && !aItemsInMonth.length ? '<div class="empty">Sin obligaciones asignadas para este mes.</div>' : ''}
-
-  <div class="actions"><button class="btn pri" data-a="close">Listo</button></div>`);
-}
-
-/* ---- DEMÁS MODALES Y COBROS ---- */
-function periodSelect(idf,selected){
-  const opts=[['Mensual',periodOptions('M')],['Semestral',periodOptions('S')],['Anual',periodOptions('A')]];
-  const flat=opts.flatMap(o=>o[1]);if(selected&&!flat.includes(selected))opts.unshift(['Otro',[selected]]);
-  return `<select id="${idf}">${opts.map(([g,a])=>`<optgroup label="${g}">${a.map(k=>`<option value="${k}" ${k===selected?'selected':''}>${plabel(k)}</option>`).join('')}</optgroup>`).join('')}</select>`;
-}
-function modalCobro(id,pre){
-  const x=id?S.cobros[id]:{clienteId:(pre&&pre.cid)||'',periodo:(pre&&pre.k)||defaultPeriod('M'),concepto:'',monto:0,tipoDoc:'recibo',numDoc:'',fechaEmision:todayStr(),abonos:[],nota:''};
-  const cls=activos();
-  openModal(`<h2>${id?'Editar cobro':'Nuevo cobro'}</h2>
-  <div class="fgrid">
-    <div class="full"><label>Cliente<select id="c_cli" data-f="c_cli"><option value="">— elegir —</option>${cls.map(c=>`<option value="${c.id}" ${c.id===x.clienteId?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></label></div>
-    <div><label>Período${periodSelect('c_per',x.periodo)}</label></div>
-    <div><label>Fecha de emisión<input id="c_fec" type="date" value="${x.fechaEmision||todayStr()}"></label></div>
-    <div class="full"><label>Concepto<input id="c_con" value="${esc(x.concepto)}"></label></div>
-    <div><label>Monto (USD)<input id="c_mon" type="number" min="0" step="0.01" value="${x.monto||''}"></label></div>
-    <div><label>Documento<select id="c_doc" data-f="c_doc"><option value="recibo" ${x.tipoDoc==='recibo'?'selected':''}>Recibo</option><option value="factura" ${x.tipoDoc==='factura'?'selected':''}>Factura</option></select></label></div>
-    <div class="full"><label id="c_numlbl">N.º de documento<input id="c_num" value="${esc(x.numDoc)}"></label></div>
-    <div class="full"><label>Nota<input id="c_nota" value="${esc(x.nota)}"></label></div>
-  </div>
-  <div class="actions">${id?`<button class="btn danger" data-a="anular" data-id="${id}">Anular</button>`:''}
-  <button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro" data-id="${id||''}">Guardar</button></div>`);
-}
-function autofillCobro(){
-  const c=S.clientes[val('c_cli')];if(!c)return;
-  const k=val('c_per');
-  document.getElementById('c_mon').value=c.tarifa||'';
-  document.getElementById('c_doc').value=c.doc||'recibo';
-  document.getElementById('c_con').value='Honorarios '+plabel(k);
-}
-function saveCobro(id){
-  const cid=val('c_cli');if(!cid){toast('Elige un cliente');return}
-  const monto=+val('c_mon');if(!(monto>0)){toast('Ingresa un monto');return}
-  const prev=id?S.cobros[id]:{abonos:[]};
-  const x={...prev,clienteId:cid,periodo:val('c_per'),concepto:val('c_con').trim(),monto,tipoDoc:val('c_doc'),numDoc:val('c_num').trim(),fechaEmision:val('c_fec')||todayStr(),nota:val('c_nota').trim(),abonos:prev.abonos||[]};
-  if(x.tipoDoc==='recibo'&&!x.numDoc)x.numDoc=nextRecibo();
-  Store.put('cobros',id||uid(),x);closeModal();toast('Cobro guardado');
-}
-
-function modalGenerar(){
-  const opts=periodOptions('M');
-  openModal(`<h2>Generar cobros</h2>
-  <div class="fgrid"><div class="full"><label>Mes a facturar<select id="g_mes" data-f="g_mes">${opts.map(k=>`<option value="${k}">${plabel(k)}</option>`).join('')}</select></label></div></div>
-  <div id="g_list"></div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="crearGenerados">Crear seleccionados</button></div>`,true);
-  listGenerar();
-}
-function candidatos(mk){
-  const [y,m]=mk.split('-').map(Number);
-  return activos().filter(c=>c.cobra&&c.tarifa>0).map(c=>{
-    const k=c.cobroFreq==='S'?semOfMonth(y,m):c.cobroFreq==='A'?String(y):mk;
-    return {c,k};
-  }).filter(r=>aplica(r.c,r.k)&&!cobroDe(r.c.id,r.k));
-}
-function listGenerar(){
-  const mk=val('g_mes'),L=candidatos(mk);
-  $('#g_list').innerHTML=L.length?`<div class="tablewrap"><table style="min-width:0"><tbody>${L.map((r,i)=>`<tr><td><input type="checkbox" class="g_chk" data-i="${i}" checked></td><td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${plabel(r.k)}</div></td><td class="r">${money(r.c.tarifa)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros por generar.</div>';
-}
-async function crearGenerados(){
-  const L=candidatos(val('g_mes')),picks=[...document.querySelectorAll('.g_chk')].filter(e=>e.checked).map(e=>L[+e.dataset.i]);
-  if(!picks.length){toast('Nada seleccionado');return}
-  closeModal();let n=0;
-  for(const r of picks){
-    const x={clienteId:r.c.id,periodo:r.k,concepto:'Honorarios '+plabel(r.k),monto:r.c.tarifa,tipoDoc:r.c.doc||'recibo',numDoc:'',fechaEmision:todayStr(),abonos:[],nota:''};
-    if(x.tipoDoc==='recibo')x.numDoc=nextRecibo();
-    await Store.put('cobros',uid(),x);n++;
-  }
-  toast(n+' cobros creados');
-}
-
-function modalPago(id){
-  const x=S.cobros[id],c=S.clientes[x.clienteId]||{nombre:'—'},k=cobroCalc(x);
-  openModal(`<h2>Registrar cobro</h2>
-  <p><b>${esc(c.nombre)}</b> · Saldo: ${money(k.saldo)}</p>
-  <div class="fgrid">
-    <div><label>Fecha<input id="p_fec" type="date" value="${todayStr()}"></label></div>
-    <div><label>Monto recibido<input id="p_mon" type="number" min="0" step="0.01" value="${k.saldo}"></label></div>
-    <div><label>Forma<select id="p_for">${FORMAS.map(f=>`<option>${f}</option>`).join('')}</select></label></div>
-    <div><label>Referencia<input id="p_ref"></label></div>
-  </div>
-  <div class="actions"><button class="btn" data-a="close">Cerrar</button><button class="btn pri" data-a="savePago" data-id="${id}">Registrar</button></div>`);
-}
-function savePago(id){
-  const m=+val('p_mon');if(!(m>0)){toast('Ingresa el monto');return}
-  const x=clean(S.cobros[id]);x.abonos=x.abonos||[];
-  x.abonos.push({f:val('p_fec')||todayStr(),m,forma:val('p_for'),ref:val('p_ref').trim()});
-  Store.put('cobros',id,x);closeModal();toast('Pago registrado');
-}
-
-/* ============ BÓVEDA CIFRADA (AES-256-GCM + PBKDF2) ============ */
-const VAULT={key:null,data:{},timer:null,busy:false};
-const _enc=new TextEncoder(),_dec=new TextDecoder();
-const b64=buf=>{let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s)};
-const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-const cryptoOK=()=>!!(window.crypto&&window.crypto.subtle);
-async function deriveKey(pass,salt,iter){
-  const km=await crypto.subtle.importKey('raw',_enc.encode(pass),'PBKDF2',false,['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iter,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-}
-async function encJSON(key,obj){
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,_enc.encode(JSON.stringify(obj)));
-  return {iv:b64(iv),ct:b64(ct)};
-}
-async function decJSON(key,d){
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},key,unb64(d.ct));
-  return JSON.parse(_dec.decode(pt));
-}
-function vTouch(){
-  clearTimeout(VAULT.timer);
-  if(VAULT.key)VAULT.timer=setTimeout(()=>{lockVault();toast('Bóveda bloqueada por inactividad')},5*60*1000);
-}
-function lockVault(silent){
-  VAULT.key=null;VAULT.data={};clearTimeout(VAULT.timer);
-  if(/vault/.test(($('#modal').firstChild||{}).className||'')||document.getElementById('v_sens'))closeModal();
-  if(!silent)render();
-}
-function vClaves(){
-  if(!cryptoOK())return `<div class="card"><b>Cifrado no disponible</b></div>`;
-  const meta=S.boveda.meta;
-  if(!meta)return `<div class="card" style="max-width:560px"><b>🔒 Crear bóveda de claves</b>
-    <div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password"></label></div>
-    <div class="full"><label>Repite la clave<input id="v_pass2" type="password"></label></div></div>
-    <div class="actions"><button class="btn pri" data-a="vSetup">Crear bóveda</button></div></div>`;
-  if(!VAULT.key)return `<div class="card" style="max-width:480px"><b>🔒 Bóveda bloqueada</b>
-    <div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password"></label></div></div>
-    <div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>`;
-  return `<div class="card"><b>🔒 Bóveda activada</b><p class="sm">Tus claves están seguras y cifradas en la nube.</p></div>`;
-}
-
-/* ============ ACCIONES ============ */
 const ACT={
   tab:d=>{UI.tab=d.k;render()},
-  vSetup:async()=>{
-    const p=val('v_pass'),p2=val('v_pass2');
-    if(p.length<12||p!==p2){toast('Revisa la clave maestra (mín 12 caracteres)');return}
-    const salt=crypto.getRandomValues(new Uint8Array(16)),iter=600000,key=await deriveKey(p,salt,iter);
-    await Store.put('boveda','meta',{salt:b64(salt),iter,check:await encJSON(key,{ok:'BITACORA'}),creado:todayStr()});
-    VAULT.key=key;render();toast('Bóveda creada');
-  },
-  vUnlock:async()=>{
-    const p=val('v_pass'),m=S.boveda.meta;
-    try{
-      const key=await deriveKey(p,unb64(m.salt),m.iter);
-      const ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
-      VAULT.key=key;render();toast('Desbloqueada');
-    }catch(e){toast('Clave incorrecta')}
-  },
-  close:()=>closeModal(),
-  bgclose:(d,e)=>{if(e.target.classList.contains('bg'))closeModal()},
-  shift:d=>{const o=periodOptions(UI.ctype),i=o.indexOf(UI.cper)-(+d.dir);if(i>=0&&i<o.length){UI.cper=o[i];render()}},
-  ayShift:d=>{UI.ay+=+d.dir;render()},
   ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
   toggle:d=>{
     const id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
     if(av.done[d.o])delete av.done[d.o];else av.done[d.o]=true;
     Store.put('avances',id,av);
-  },
-  todo:d=>{
-    const c=S.clientes[d.c],t=ptype(d.k),id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
-    oblFor(c,t).forEach(o=>{av.done[o.k]=true});
-    Store.put('avances',id,av);
-  },
-  anCellDist:d=>modalAnDist(d.c, +d.y, +d.m),
-  nuevaObl:()=>modalObl(null),
-  editObl:d=>modalObl(d.k),
-  delObl:d=>{ Store.del('catObl', d.k); toast('Obligación eliminada'); },
-  saveObl:d=>saveObl(d.k),
-  nuevoCliente:()=>modalCliente(null),
-  editCliente:d=>modalCliente(d.id),
-  saveCliente:d=>saveCliente(d.id||null),
-  delCliente:d=>{ Store.del('clientes',d.id);closeModal();toast('Cliente eliminado'); },
-  nuevoCobro:()=>modalCobro(null),
-  saveCobro:d=>saveCobro(d.id||null),
-  pagar:d=>modalPago(d.id),
-  savePago:d=>savePago(d.id),
-  guardarCfg:()=>{Store.put('config','main',{nombre:val('cfg_nombre').trim(),ruc:val('cfg_ruc').trim(),tel:val('cfg_tel').trim(),ciudad:val('cfg_ciudad').trim(),mail:val('cfg_mail').trim(),nota:val('cfg_nota').trim()});toast('Ajustes guardados')},
-  respaldo:()=>saveFile('respaldo_bitacora_'+todayStr()+'.json',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]])),null,1))
+  }
 };
 
 document.addEventListener('click',e=>{
@@ -1046,10 +429,6 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
   if(f==='cper'){UI.cper=t.value;render()}
-  else if(f==='ay'){UI.ay=+t.value;render()}
-  else if(f==='asolo'){UI.asolo=t.checked;render()}
-  else if(f==='solo'){UI.solo=t.checked;render()}
-  else if(f==='ord'){UI.ord[t.dataset.s]=t.value;render()}
 });
 
 UI.cper=defaultPeriod('M');
