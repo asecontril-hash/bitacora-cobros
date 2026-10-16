@@ -38,7 +38,7 @@ header.top .sub{color:var(--mut);font-size:13px}
 nav.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;border-bottom:1px solid var(--line)}
 nav.tabs button{background:none;border:0;padding:10px 14px;color:var(--mut);font:inherit;font-weight:600;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
 nav.tabs button.on{color:var(--pri);border-bottom-color:var(--pri)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
 .grid{display:grid;gap:12px}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px}
 .kpi .n{font-size:26px;font-weight:700;letter-spacing:-.5px}
@@ -76,7 +76,7 @@ td.r,th.r{text-align:right}
 .empty{text-align:center;color:var(--mut);padding:30px 10px}
 #modal .bg{position:fixed;inset:0;background:rgba(10,15,22,.55);display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 12px 16px;overflow:auto;z-index:50}
 #modal .box{background:var(--card);border-radius:14px;width:100%;max-width:560px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.3);margin:auto}
-#modal .box.wide{max-width:720px}
+#modal .box.wide{max-width:760px}
 #modal h2{margin:0 0 12px;font-size:18px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fgrid .full{grid-column:1/-1}
@@ -94,6 +94,12 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .ob-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin-top:6px}
 .ob-item{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--bg);padding:6px 8px;border-radius:6px;border:1px solid var(--line)}
 .ob-item input{margin:0}
+.sec-title{font-size:13px;font-weight:700;color:var(--pri);margin-top:8px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; padding: 20px; font-family: sans-serif; }
+}
 @media (max-width:600px){.fgrid{grid-template-columns:1fr}.kpi .n{font-size:22px}}
 </style>
 
@@ -134,6 +140,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 </div>
 <div id="modal"></div>
 <div id="toast"></div>
+<div id="print-area"></div>
 
 <script>
 /* ============ CONSTANTES FISCALES Y CATÁLOGO ============ */
@@ -185,7 +192,7 @@ function getOblList(){
 
 /* ============ UTILIDADES ============ */
 const $=s=>document.querySelector(s);
-const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
 const pad=n=>String(n).padStart(2,'0');
 const money=n=>new Intl.NumberFormat('es-EC',{style:'currency',currency:'USD'}).format(Number(n)||0);
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -205,19 +212,33 @@ function plabel(k){
   return 'Año '+k;
 }
 function monthKey(y,m){return y+'-'+pad(m)}
+
+// Genera opciones desde 2026 hacia adelante únicamente
 function periodOptions(t){
   const y=now.getFullYear(),m=now.getMonth()+1,out=[];
-  if(t==='M'){for(let i=-1;i<47;i++){let mm=m-i,yy=y;while(mm<1){mm+=12;yy--}out.push(monthKey(yy,mm))}}
-  if(t==='S'){for(let yy=y+1;yy>=y-4;yy--){out.push(yy+'-S2');out.push(yy+'-S1')}}
-  if(t==='A'){for(let yy=y+1;yy>=y-5;yy--)out.push(String(yy))}
-  return out;
+  if(t==='M'){
+    for(let yy=y; yy>=2026; yy--){
+      let maxM = (yy===y)? m+3 : 12;
+      for(let mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm));
+    }
+  }
+  if(t==='S'){
+    for(let yy=y+1; yy>=2026; yy--){ out.push(yy+'-S2'); out.push(yy+'-S1'); }
+  }
+  if(t==='A'){
+    for(let yy=y+1; yy>=2026; yy--) out.push(String(yy));
+  }
+  return out.length ? out : [t==='M'?'2026-01':t==='S'?'2026-S1':'2026'];
 }
+
 function defaultPeriod(t){
   const y=now.getFullYear(),m=now.getMonth()+1;
+  if(y < 2026) return t==='M'?'2026-01':t==='S'?'2026-S1':'2026';
   if(t==='M'){return m===1?monthKey(y-1,12):monthKey(y,m-1)}
   if(t==='S'){return m>=7?y+'-S1':(y-1)+'-S2'}
   return String(y-1);
 }
+
 function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
 
 function dueDate(c, k, oblKey) {
@@ -276,22 +297,29 @@ const searchInput=(fieldKey, valStr)=>`<input type="text" id="src_${fieldKey}" p
 
 const activos=()=>clientesList().filter(c=>c.activo!==false);
 const cobrosList=()=>Object.entries(S.cobros).map(([id,c])=>({...c,id}));
-function desdeOf(c){return c.desde||(now.getFullYear()+'-01')}
+function desdeOf(c){return c.desde||'2026-01'}
+
 function aplica(c,k){
   const d=desdeOf(c),t=ptype(k);
+  if(k < '2026') return false; // Bloquea datos anteriores al 2026
   if(t==='M')return k>=d;
   if(t==='S'){const [y,s]=k.split('-S');return y+'-'+(s==='1'?'06':'12')>=d}
   return k+'-12'>=d;
 }
+
 function oblFor(c,t){
   return getOblList().filter(o=>{
     if(!c.obl||c.obl[o.k]===false)return false;
     if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
-    return o.f==='P'?PERCODE[c.periodicidad]===t:o.f===t;
+    // Asignación de frecuencia basada en la obligación
+    return o.f==='P' ? true : o.f===t;
   });
 }
+
 function avanceOf(cid,k){return S.avances[cid+'__'+k]||{done:{}}}
+
 function rowsFor(t,k){
+  if(k < '2026') return [];
   return activos().map(c=>{
     if(!aplica(c,k))return null;
     const items=oblFor(c,t);if(!items.length)return null;
@@ -302,6 +330,7 @@ function rowsFor(t,k){
     return {c,items,av,done,total:items.length,due:minDue,dd,complete:done===items.length,overdue:dd<0&&done<items.length};
   }).filter(Boolean);
 }
+
 function cobroCalc(x){
   const pagado=(x.abonos||[]).reduce((s,a)=>s+(+a.m||0),0),monto=+x.monto||0,saldo=Math.max(0,+(monto-pagado).toFixed(2));
   let est=x.anulado?'anulado':pagado>=monto&&monto>0?'pagado':pagado>0?'parcial':'pendiente';
@@ -380,7 +409,7 @@ async function saveVaultItems(){
 }
 
 /* ============ INTERFAZ Y VISTAS ============ */
-const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros y Recibos'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
   const cfgPass = gateCfg();
@@ -425,10 +454,23 @@ function vPanel(){
   </div>`;
 }
 
+/* VISTA CONTROL DE OBLIGACIONES CON SEPARACIÓN Y FILTRO DE PENDIENTES */
 function vControl(){
   const t=UI.ctype,k=UI.cper;
-  let rows=rowsFor(t,k).filter(r=>inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl));
-  const opts=periodOptions(t);if(!opts.includes(k))opts.unshift(k);
+  let allRows=rowsFor(t,k).filter(r=>inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl)&&!r.complete);
+  
+  const vencidos = allRows.filter(r => r.overdue);
+  const porVencer = allRows.filter(r => !r.overdue);
+  const opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
+
+  const renderTable = (list) => `<div class="tablewrap"><table>
+    <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>
+    <tbody>${list.map(r=>`<tr>
+      <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
+      <td>${dueChip(r)}</td>
+      <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div></td>
+    </tr>`).join('')}</tbody></table></div>`;
+
   return `
   <div class="bar">
     <div class="seg">${['M','S','A'].map(x=>`<button class="${t===x?'on':''}" data-a="ctype" data-k="${x}">${TIPOLBL[x]}</button>`).join('')}</div>
@@ -436,14 +478,14 @@ function vControl(){
     ${grpSelect()}
     ${searchInput('q_ctrl', UI.q_ctrl)}
   </div>
-  <div class="card">
-    ${rows.length?`<div class="tablewrap"><table>
-      <thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
-        <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
-        <td>${dueChip(r)}</td>
-        <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div></td>
-      </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Sin coincidencias u obligaciones en este período.</div>'}
+  
+  ${vencidos.length ? `<div class="card" style="border-left:4px solid var(--bad)">
+    <b style="color:var(--bad)">🚨 Declaraciones Vencidas (${vencidos.length})</b>${renderTable(vencidos)}
+  </div>` : ''}
+
+  <div class="card" style="border-left:4px solid var(--pri)">
+    <b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo (${porVencer.length})</b>
+    ${porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes para este período.</div>'}
   </div>`;
 }
 
@@ -495,7 +537,7 @@ function cellInfoAnual(c, y, mNum) {
 }
 
 function vAnual(){
-  const y=UI.ay;
+  const y = UI.ay < 2026 ? 2026 : UI.ay;
   let rows=activos().filter(c=>inGrp(c)&&matchesQ(c, UI.q_anual)).map(c=>{
     const cells=[];
     for(let m=1;m<=12;m++) cells.push(cellInfoAnual(c,y,m));
@@ -505,7 +547,7 @@ function vAnual(){
 
   return `
   <div class="bar">
-    <button class="btn" data-a="ayShift" data-dir="-1">◀</button>
+    <button class="btn" data-a="ayShift" data-dir="-1" ${y<=2026?'disabled':''}>◀</button>
     <b>Año ${y}</b>
     <button class="btn" data-a="ayShift" data-dir="1">▶</button>
     ${grpSelect()}
@@ -582,19 +624,31 @@ function vClaves(){
   </div>`;
 }
 
+/* VISTA DE COBROS Y REGISTRO GENERAL CON HISTORIAL Y RECIBOS */
 function vCobros(){
   let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
   return `
-  <div class="bar"><button class="btn pri" data-a="nuevoCobro">+ Nuevo cobro</button></div>
+  <div class="bar">
+    <button class="btn pri" data-a="nuevoCobro">+ Nuevo Cobro / Acumulado</button>
+  </div>
   <div class="card">
-  ${L.length?`<div class="tablewrap"><table>
-    <thead><tr><th>Emisión</th><th>Cliente / Concepto</th><th>Monto</th><th>Saldo</th><th>Estado</th><th>Acción</th></tr></thead>
-    <tbody>${L.map(r=>`<tr>
-      <td>${fmtDate(r.x.fechaEmision)}</td>
-      <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.x.concepto||'')}</div></td>
-      <td>${money(r.x.monto)}</td><td><b>${money(r.saldo)}</b></td><td>${estChip(r.est)}</td>
-      <td><button class="btn sm" data-a="abonarCobro" data-id="${r.x.id}">+ Abono</button></td>
-    </tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros registrados.</div>'}
+    <b>📜 Registro General de Cobros y Pagos Realizados</b>
+    ${L.length?`<div class="tablewrap"><table style="margin-top:10px">
+      <thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Conceptos / Períodos</th><th>Monto Total</th><th>Pagado</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${L.map(r=>{
+        const ultAbono = r.x.abonos && r.x.abonos.length ? r.x.abonos[r.x.abonos.length-1].f : r.x.fechaEmision;
+        return `<tr>
+        <td><b>${fmtDate(ultAbono)}</b><div class="sm">Emisión: ${fmtDate(r.x.fechaEmision)}</div></td>
+        <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc||'')}</div></td>
+        <td>${esc(r.x.concepto||'')}</td>
+        <td>${money(r.x.monto)}</td>
+        <td><b>${money(r.pagado)}</b></td>
+        <td>${estChip(r.est)}</td>
+        <td>
+          <button class="btn sm" data-a="abonarCobro" data-id="${r.x.id}">+ Abono</button>
+          <button class="btn sm pri" data-a="imprimirRecibo" data-id="${r.x.id}">🖨️ Recibo</button>
+        </td>
+      </tr>`}).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros registrados.</div>'}
   </div>`;
 }
 
@@ -607,10 +661,10 @@ function vClientes(){
   </div>
   <div class="card">
   ${L.length?`<div class="tablewrap"><table>
-    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Periodicidad</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>
+    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>
     <tbody>${L.map(c=>`<tr>
       <td><div class="nm">${esc(c.nombre)}</div>${tagsCli(c)}</td>
-      <td>${esc(c.ruc)}</td><td>${esc(c.tipo)}</td><td>${esc(c.periodicidad)}</td>
+      <td>${esc(c.ruc)}</td><td>${esc(c.tipo)}</td>
       <td><b>${c.cobra!==false?money(c.tarifa||0):'No aplica'}</b><div class="sm">${c.doc==='factura'?'Factura':'Recibo interno'}</div></td>
       <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar</button></td>
     </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Aún no hay clientes coincidentes.</div>'}
@@ -651,22 +705,31 @@ function openModal(html,wide){
 function closeModal(){$('#modal').innerHTML=''}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 
+/* MODAL DE CLIENTE CON TITULOS DE OBLIGACIONES ORGANIZADOS Y SIN PERIODICIDAD FISCAL */
 function modalCliente(id){
   const c = id ? S.clientes[id] : {
     nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
-    periodicidad:'MENSUAL',contabilidad:false,cobra:true,tarifa:0,
+    contabilidad:false,cobra:true,tarifa:0,
     cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',
     obl:{F103_104:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
   };
   const cat = getOblList();
+
+  const mens = cat.filter(o => o.f === 'P');
+  const sem = cat.filter(o => o.f === 'S');
+  const anu = cat.filter(o => o.f === 'A');
+
+  const renderObGroup = (items) => items.map(o => {
+    const checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
+    return `<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="${o.k}" ${checked}> ${esc(o.n)}</label>`;
+  }).join('');
 
   openModal(`<h2>${id?'Editar cliente':'Nuevo cliente'}</h2>
   <div class="fgrid">
     <div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="${esc(c.nombre)}"></label></div>
     <div><label>RUC<input id="m_ruc" value="${esc(c.ruc)}"></label></div>
     <div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" ${c.tipo==='PERSONA NATURAL'?'selected':''}>Persona Natural</option><option value="SOCIEDAD" ${c.tipo==='SOCIEDAD'?'selected':''}>Sociedad</option></select></label></div>
-    <div><label>Periodicidad Fiscal<select id="m_per"><option value="MENSUAL" ${c.periodicidad==='MENSUAL'?'selected':''}>Mensual</option><option value="SEMESTRAL" ${c.periodicidad==='SEMESTRAL'?'selected':''}>Semestral</option></select></label></div>
-    <div><label>Grupo / Holding<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
+    <div class="full"><label>Grupo / Holding<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
     
     <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
       <b>Condiciones Comerciales y de Cobro:</b>
@@ -677,13 +740,15 @@ function modalCliente(id){
     <div><label>Documento que se emite<select id="m_doc"><option value="factura" ${c.doc==='factura'?'selected':''}>Factura electrónica</option><option value="recibo" ${c.doc==='recibo'?'selected':''}>Recibo / Doc. interno</option><option value="sin" ${c.doc==='sin'?'selected':''}>Sin documento</option></select></label></div>
 
     <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
-      <label>Obligaciones Asignadas al Cliente:</label>
-      <div class="ob-grid">
-        ${cat.map(o => {
-          const checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
-          return `<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="${o.k}" ${checked}>${esc(o.n)}</label>`;
-        }).join('')}
-      </div>
+      <b>Obligaciones Asignadas al Cliente:</b>
+      
+      <div class="sec-title">📅 Obligaciones Mensuales</div>
+      <div class="ob-grid">${renderObGroup(mens)}</div>
+
+      ${sem.length ? `<div class="sec-title">📆 Obligaciones Semestrales</div><div class="ob-grid">${renderObGroup(sem)}</div>` : ''}
+
+      <div class="sec-title">🗓️ Obligaciones Anuales</div>
+      <div class="ob-grid">${renderObGroup(anu)}</div>
     </div>
   </div>
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar Cliente</button></div>`, true);
@@ -698,7 +763,7 @@ function modalObl(key){
     <div><label>Código / Clave<input id="mo_k" value="${esc(o.k)}" ${key?'readonly style="background:var(--bg)"':''}></label></div>
     <div><label>Nombre<input id="mo_n" value="${esc(o.n)}"></label></div>
     <div><label>Frecuencia<select id="mo_f">
-      <option value="P" ${o.f==='P'?'selected':''}>Periódica (Mensual / Semestral según cliente)</option>
+      <option value="P" ${o.f==='P'?'selected':''}>Mensual</option>
       <option value="S" ${o.f==='S'?'selected':''}>Semestral</option>
       <option value="A" ${o.f==='A'?'selected':''}>Anual</option>
     </select></label></div>
@@ -743,19 +808,43 @@ function modalClave(){
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>`);
 }
 
+/* MODAL DE REGISTRO DE COBRO MULTI-PERÍODO Y ACUMULADO */
 function modalCobro(cid, conceptoDef, montoDef){
   const clis=activos();
   const targetCli = cid ? S.clientes[cid] : null;
   const autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
 
-  openModal(`<h2>Registrar Cobro</h2>
+  openModal(`<h2>Registrar Cobro / Recibo</h2>
   <div class="fgrid">
-    <div class="full"><label>Cliente<select id="mc_cli">${clis.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></label></div>
-    <div class="full"><label>Concepto<input id="mc_con" value="${esc(conceptoDef||'Honorarios profesionales')}"></label></div>
-    <div><label>Monto ($)<input id="mc_mon" type="number" step="0.01" value="${autoMonto||''}"></label></div>
-    <div><label>Fecha Emisión<input id="mc_fec" type="date" value="${todayStr()}"></label></div>
+    <div class="full"><label>Cliente<select id="mc_cli" onchange="ACT.updateMultiCobro(this.value)">
+      <option value="">-- Seleccionar cliente --</option>
+      ${clis.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.nombre)}</option>`).join('')}
+    </select></label></div>
+    
+    <div class="full" id="mc_multi_container">
+      <label>Concepto / Detalle de Servicios Acumulados:<input id="mc_con" value="${esc(conceptoDef||'Honorarios profesionales')}"></label>
+    </div>
+
+    <div><label>Monto Total A Cobrar ($)<input id="mc_mon" type="number" step="0.01" value="${autoMonto||''}"></label></div>
+    <div><label>Monto Cobrado Hoy ($)<input id="mc_pag" type="number" step="0.01" value="${autoMonto||''}"></label></div>
+    <div><label>Fecha de Emisión<input id="mc_fec" type="date" value="${todayStr()}"></label></div>
+    <div><label>Fecha de Cobro / Abono<input id="mc_fec_pago" type="date" value="${todayStr()}"></label></div>
   </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Cobro</button></div>`);
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Registro de Cobro</button></div>`);
+}
+
+function modalAbono(id){
+  const x = S.cobros[id]; if(!x) return;
+  const c = S.clientes[x.clienteId]||{nombre:'Cliente'};
+  const calc = cobroCalc(x);
+
+  openModal(`<h2>Abonar a Cobro Pending</h2>
+  <p><b>Cliente:</b> ${esc(c.nombre)}<br><b>Concepto:</b> ${esc(x.concepto)}<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">${money(calc.saldo)}</span></p>
+  <div class="fgrid">
+    <div><label>Monto del Abono ($)<input id="ma_monto" type="number" step="0.01" value="${calc.saldo}"></label></div>
+    <div><label>Fecha del Abono<input id="ma_fec" type="date" value="${todayStr()}"></label></div>
+  </div>
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="${id}">Registrar Abono</button></div>`);
 }
 
 function modalAnDist(cid, y, mNum){
@@ -771,9 +860,64 @@ function modalAnDist(cid, y, mNum){
   ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-m="${mNum}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
   <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
   <div style="display:flex;justify-content:space-between;align-items:center">
-    <button class="btn sm" data-a="crearCobroDesdeModal" data-c="${cid}" data-m="${MESES[mNum-1]} ${y}">+ Registrar cobro/honorario</button>
-    <button class="btn pri" data-a="close">Listo</button>
+    ${c.cobra !== false ? `<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="${cid}" data-m="${MESES[mNum-1]}${y}">+ Registrar cobro/honorario</button>` : '<span></span>'}
+    <button class="btn" data-a="close">Listo</button>
   </div>`);
+}
+
+/* IMPRESIÓN DE RECIBO */
+function imprimirReciboCobro(id){
+  const x = S.cobros[id]; if(!x) return;
+  const c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
+  const calc = cobroCalc(x);
+  const ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1].f : x.fechaEmision;
+
+  const html = `
+    <div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">
+        <div>
+          <h2 style="margin:0;font-size:22px">COMPROBANTE / RECIBO DE COBRO</h2>
+          <div style="font-size:13px;color:#555">Servicios Contables y Tributarios</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:bold">RECIBO N.° ${id.slice(-6).toUpperCase()}</div>
+          <div style="font-size:13px">Fecha: ${fmtDate(ultAbono)}</div>
+        </div>
+      </div>
+      
+      <table style="width:100%;margin-bottom:15px;font-size:14px;border:none">
+        <tr><td><strong>RECIBIDO DE:</strong> ${esc(c.nombre)}</td><td><strong>RUC/C.I.:</strong> ${esc(c.ruc)}</td></tr>
+        <tr><td colspan="2" style="padding-top:8px"><strong>CONCEPTO:</strong> ${esc(x.concepto)}</td></tr>
+      </table>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px">
+        <thead>
+          <tr style="background:#eee">
+            <th style="border:1px solid #000;padding:6px;text-align:left">Detalle / Período</th>
+            <th style="border:1px solid #000;padding:6px;text-align:right">Monto Total</th>
+            <th style="border:1px solid #000;padding:6px;text-align:right">Pagado</th>
+            <th style="border:1px solid #000;padding:6px;text-align:right">Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border:1px solid #000;padding:8px">${esc(x.concepto)}</td>
+            <td style="border:1px solid #000;padding:8px;text-align:right">${money(x.monto)}</td>
+            <td style="border:1px solid #000;padding:8px;text-align:right">${money(calc.pagado)}</td>
+            <td style="border:1px solid #000;padding:8px;text-align:right">${money(calc.saldo)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">
+        <div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Entregué Conforme</div>
+        <div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Recibí Conforme</div>
+      </div>
+    </div>
+  `;
+
+  $('#print-area').innerHTML = html;
+  window.print();
 }
 
 /* ============ MANEJO DE EVENTOS ============ */
@@ -800,7 +944,6 @@ const ACT={
     const k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d');
     if(!k||!n){toast('Ingresa código y nombre');return}
     
-    // Cargar lista base si no se ha personalizado
     if(Object.keys(S.catObl).length===0){
       DEFAULT_OBL.forEach(o=>{ S.catObl[o.k]=o; });
     }
@@ -826,14 +969,33 @@ const ACT={
     }
   },
   nuevoCobro:()=>modalCobro(null, '', ''),
-  crearCobroDesdeModal:d=>modalCobro(d.c, 'Declaración '+d.m, ''),
+  crearCobroDesdeModal:d=>modalCobro(d.c, 'Honorarios / Declaración '+d.m, ''),
+  updateMultiCobro:(cid)=>{
+    const c = S.clientes[cid];
+    if(c && c.tarifa){
+      $('#mc_mon').value = c.tarifa;
+      $('#mc_pag').value = c.tarifa;
+    }
+  },
   saveCobro:async()=>{
-    const clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
+    const clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), pagado=+val('mc_pag'), fechaEmision=val('mc_fec'), fechaPago=val('mc_fec_pago');
     if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return}
     const id='cb_'+uid();
-    await Store.put('cobros',id,{id,clienteId,concepto,monto,fechaEmision,abonos:[]});
+    const abonos = pagado > 0 ? [{f:fechaPago||fechaEmision, m:pagado}] : [];
+    await Store.put('cobros',id,{id,clienteId,concepto,monto,fechaEmision,abonos});
     closeModal(); toast('Cobro registrado');
   },
+  abonarCobro:d=>modalAbono(d.id),
+  saveAbono:async d=>{
+    const monto = +val('ma_monto'), fec = val('ma_fec');
+    if(!monto||!fec){toast('Ingresa monto y fecha');return}
+    const x = clean(S.cobros[d.id]);
+    x.abonos = x.abonos || [];
+    x.abonos.push({f:fec, m:monto});
+    await Store.put('cobros', d.id, x);
+    closeModal(); toast('Abono registrado');
+  },
+  imprimirRecibo:d=>imprimirReciboCobro(d.id),
   vSetup:async()=>{
     const p=val('v_pass');
     if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return}
@@ -887,7 +1049,6 @@ const ACT={
       nombre,
       ruc,
       tipo:val('m_tipo'),
-      periodicidad:val('m_per'),
       grupo:val('m_grupo').trim(),
       cobra: val('m_cobra') === 'true',
       tarifa: +val('m_tarifa') || 0,
