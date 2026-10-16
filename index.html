@@ -268,7 +268,7 @@ const matchesQ=(c, qTerm)=>{
 
 const clientesList=()=>Object.entries(S.clientes).map(([id,c])=>({...c,id})).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
 const gruposList=()=>[...new Set(clientesList().map(c=>(c.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'');
+const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'')+(c.cobra===false?`<span class="chip mut">Gratuito</span> `:`<span class="chip ok">$${c.tarifa||0}</span> `)+(c.doc==='factura'?`<span class="chip info">Factura</span>`:`<span class="chip mut">Recibo</span>`);
 const inGrp=c=>UI.fgr==='todos'||(UI.fgr==='__sin'?!(c.grupo||'').trim():(c.grupo||'').trim()===UI.fgr);
 const grpSelect=()=>`<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.fgr==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.fgr===g?'selected':''}>🏢 ${esc(g)}</option>`).join('')}</select>`;
 
@@ -534,14 +534,17 @@ function vCatObl(){
     <b>Catálogo de obligaciones fiscales</b>
     <p class="sm">Configura códigos, frecuencias y meses de vencimiento. Se aplicará automáticamente a la matriz.</p>
     <div class="tablewrap"><table style="min-width:700px">
-      <thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acción</th></tr></thead>
+      <thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acciones</th></tr></thead>
       <tbody>${list.map(o=>`<tr>
         <td><b>${esc(o.k)}</b></td>
         <td>${esc(o.n)}</td>
         <td>${o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual'}</td>
         <td>${o.m?MESES[o.m-1]:'—'}</td>
         <td>${o.d==='RUC'?'9.º dígito RUC':o.d}</td>
-        <td><button class="btn sm danger" data-a="delObl" data-k="${esc(o.k)}">Eliminar</button></td>
+        <td>
+          <button class="btn sm" data-a="editObl" data-k="${esc(o.k)}">Editar</button>
+          <button class="btn sm danger" data-a="delObl" data-k="${esc(o.k)}">Eliminar</button>
+        </td>
       </tr>`).join('')}</tbody>
     </table></div>
   </div>`;
@@ -604,11 +607,12 @@ function vClientes(){
   </div>
   <div class="card">
   ${L.length?`<div class="tablewrap"><table>
-    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Periodicidad</th><th>Acciones</th></tr></thead>
+    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Periodicidad</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>
     <tbody>${L.map(c=>`<tr>
       <td><div class="nm">${esc(c.nombre)}</div>${tagsCli(c)}</td>
       <td>${esc(c.ruc)}</td><td>${esc(c.tipo)}</td><td>${esc(c.periodicidad)}</td>
-      <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar / Obligaciones</button></td>
+      <td><b>${c.cobra!==false?money(c.tarifa||0):'No aplica'}</b><div class="sm">${c.doc==='factura'?'Factura':'Recibo interno'}</div></td>
+      <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar</button></td>
     </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Aún no hay clientes coincidentes.</div>'}
   </div>`;
 }
@@ -660,11 +664,19 @@ function modalCliente(id){
   <div class="fgrid">
     <div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="${esc(c.nombre)}"></label></div>
     <div><label>RUC<input id="m_ruc" value="${esc(c.ruc)}"></label></div>
-    <div><label>Tipo<select id="m_tipo"><option value="PERSONA NATURAL" ${c.tipo==='PERSONA NATURAL'?'selected':''}>Persona Natural</option><option value="SOCIEDAD" ${c.tipo==='SOCIEDAD'?'selected':''}>Sociedad</option></select></label></div>
-    <div><label>Periodicidad<select id="m_per"><option value="MENSUAL" ${c.periodicidad==='MENSUAL'?'selected':''}>Mensual</option><option value="SEMESTRAL" ${c.periodicidad==='SEMESTRAL'?'selected':''}>Semestral</option></select></label></div>
-    <div class="full"><label>Grupo de Empresa<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
+    <div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" ${c.tipo==='PERSONA NATURAL'?'selected':''}>Persona Natural</option><option value="SOCIEDAD" ${c.tipo==='SOCIEDAD'?'selected':''}>Sociedad</option></select></label></div>
+    <div><label>Periodicidad Fiscal<select id="m_per"><option value="MENSUAL" ${c.periodicidad==='MENSUAL'?'selected':''}>Mensual</option><option value="SEMESTRAL" ${c.periodicidad==='SEMESTRAL'?'selected':''}>Semestral</option></select></label></div>
+    <div><label>Grupo / Holding<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
     
-    <div class="full" style="margin-top:10px">
+    <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
+      <b>Condiciones Comerciales y de Cobro:</b>
+    </div>
+    <div><label>¿Se le cobra honorarios?<select id="m_cobra"><option value="true" ${c.cobra!==false?'selected':''}>Sí</option><option value="false" ${c.cobra===false?'selected':''}>No (Gratuito / Especial)</option></select></label></div>
+    <div><label>Tarifa Referencial ($)<input id="m_tarifa" type="number" step="0.01" value="${c.tarifa||''}"></label></div>
+    <div><label>Frecuencia de Cobro<select id="m_cobroFreq"><option value="M" ${c.cobroFreq==='M'?'selected':''}>Mensual</option><option value="S" ${c.cobroFreq==='S'?'selected':''}>Semestral</option><option value="A" ${c.cobroFreq==='A'?'selected':''}>Anual</option><option value="T" ${c.cobroFreq==='T'?'selected':''}>Por trámite / Eventual</option></select></label></div>
+    <div><label>Documento que se emite<select id="m_doc"><option value="factura" ${c.doc==='factura'?'selected':''}>Factura electrónica</option><option value="recibo" ${c.doc==='recibo'?'selected':''}>Recibo / Doc. interno</option><option value="sin" ${c.doc==='sin'?'selected':''}>Sin documento</option></select></label></div>
+
+    <div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">
       <label>Obligaciones Asignadas al Cliente:</label>
       <div class="ob-grid">
         ${cat.map(o => {
@@ -675,6 +687,31 @@ function modalCliente(id){
     </div>
   </div>
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar Cliente</button></div>`, true);
+}
+
+function modalObl(key){
+  const list = getOblList();
+  const o = key ? (list.find(x => x.k === key) || {k:key, n:'', f:'P', m:0, d:'RUC'}) : {k:'', n:'', f:'P', m:0, d:'RUC'};
+
+  openModal(`<h2>${key ? 'Editar Obligación' : 'Nueva Obligación'}</h2>
+  <div class="fgrid">
+    <div><label>Código / Clave<input id="mo_k" value="${esc(o.k)}" ${key?'readonly style="background:var(--bg)"':''}></label></div>
+    <div><label>Nombre<input id="mo_n" value="${esc(o.n)}"></label></div>
+    <div><label>Frecuencia<select id="mo_f">
+      <option value="P" ${o.f==='P'?'selected':''}>Periódica (Mensual / Semestral según cliente)</option>
+      <option value="S" ${o.f==='S'?'selected':''}>Semestral</option>
+      <option value="A" ${o.f==='A'?'selected':''}>Anual</option>
+    </select></label></div>
+    <div><label>Mes de Vencimiento (Anuales)<select id="mo_m">
+      <option value="0">Según período</option>
+      ${MESES.map((m,idx) => `<option value="${idx+1}" ${o.m===(idx+1)?'selected':''}>${m}</option>`).join('')}
+    </select></label></div>
+    <div class="full"><label>Día de Vencimiento<select id="mo_d">
+      <option value="RUC" ${o.d==='RUC'?'selected':''}>Según 9.º dígito del RUC</option>
+      ${[...Array(31)].map((_,i) => `<option value="${i+1}" ${String(o.d)===String(i+1)?'selected':''}>Día ${i+1}</option>`).join('')}
+    </select></label></div>
+  </div>
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="${key||''}">Guardar Obligación</button></div>`);
 }
 
 function modalClave(){
@@ -708,11 +745,14 @@ function modalClave(){
 
 function modalCobro(cid, conceptoDef, montoDef){
   const clis=activos();
+  const targetCli = cid ? S.clientes[cid] : null;
+  const autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
+
   openModal(`<h2>Registrar Cobro</h2>
   <div class="fgrid">
     <div class="full"><label>Cliente<select id="mc_cli">${clis.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></label></div>
     <div class="full"><label>Concepto<input id="mc_con" value="${esc(conceptoDef||'Honorarios profesionales')}"></label></div>
-    <div><label>Monto ($)<input id="mc_mon" type="number" step="0.01" value="${montoDef||''}"></label></div>
+    <div><label>Monto ($)<input id="mc_mon" type="number" step="0.01" value="${autoMonto||''}"></label></div>
     <div><label>Fecha Emisión<input id="mc_fec" type="date" value="${todayStr()}"></label></div>
   </div>
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Cobro</button></div>`);
@@ -754,6 +794,28 @@ const ACT={
     GATE.logged=true; render();
   },
   removeGatePass:()=>{ localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); GATE.logged=true; render(); },
+  nuevaObl:()=>modalObl(null),
+  editObl:d=>modalObl(d.k),
+  saveObl:async d=>{
+    const k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d');
+    if(!k||!n){toast('Ingresa código y nombre');return}
+    
+    // Cargar lista base si no se ha personalizado
+    if(Object.keys(S.catObl).length===0){
+      DEFAULT_OBL.forEach(o=>{ S.catObl[o.k]=o; });
+    }
+    
+    const item = {k, n, f, m, d: dVal==='RUC'?'RUC':+dVal};
+    await Store.put('catObl', k, item);
+    closeModal(); toast('Obligación guardada');
+  },
+  delObl:async d=>{
+    if(Object.keys(S.catObl).length===0){
+      DEFAULT_OBL.forEach(o=>{ S.catObl[o.k]=o; });
+    }
+    await Store.del('catObl', d.k);
+    toast('Obligación eliminada');
+  },
   toggle:async d=>{
     const id=d.c+'__'+d.k, av=clean(avanceOf(d.c,d.k)); av.clienteId=d.c; av.periodo=d.k; av.done=av.done||{};
     if(av.done[d.o]) delete av.done[d.o]; else av.done[d.o]=true;
@@ -827,9 +889,12 @@ const ACT={
       tipo:val('m_tipo'),
       periodicidad:val('m_per'),
       grupo:val('m_grupo').trim(),
-      activo:true,
-      cobra:true,
-      obl:oblMap
+      cobra: val('m_cobra') === 'true',
+      tarifa: +val('m_tarifa') || 0,
+      cobroFreq: val('m_cobroFreq'),
+      doc: val('m_doc'),
+      activo: true,
+      obl: oblMap
     };
 
     Store.put('clientes', d.id || ('c' + ruc), c);
