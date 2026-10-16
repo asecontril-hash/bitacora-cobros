@@ -118,11 +118,10 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
       messagingSenderId: "465013215619",
       appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
     };
-
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
   } catch(e) {
-    console.warn("Firebase no disponible en local:", e);
+    console.warn("Firebase offline:", e);
   }
 
   window.claude = {
@@ -354,7 +353,7 @@ const Store={
         S.ready=true;
         render();
       }
-    }, 2000);
+    }, 1500);
 
     if(db){
       this.db=db;S.kind='nube';
@@ -480,7 +479,7 @@ function vControl(){
     <tbody>${list.map(r=>`<tr>
       <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
       <td>${dueChip(r)}</td>
-      <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div></td>
+      <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div></td>
     </tr>`).join('')}</tbody></table></div>`;
 
   return `
@@ -801,7 +800,7 @@ function modalClave(){
     </div>
     <div class="full"><label>O ingresa el nombre directamente<input id="vk_cli_txt" placeholder="Si no está en la lista de clientes"></label></div>
     <div>
-      <label>Servicio / Plataforma<select id="vk_srv_sel" onchange="if(this.value==='OTRO'){$('#vk_srv_txt').style.display='block'}else{$('#vk_srv_txt').style.display='none'}">
+      <label>Servicio / Plataforma<select id="vk_srv_sel" data-f="srv_sel">
         <option value="SRI">SRI (Clave / RUC)</option>
         <option value="IESS">IESS (Patronal / Afiliado)</option>
         <option value="Supercias">Superintendencia de Compañías</option>
@@ -825,7 +824,7 @@ function modalCobro(cid, conceptoDef, montoDef){
 
   openModal(`<h2>Registrar Cobro / Recibo</h2>
   <div class="fgrid">
-    <div class="full"><label>Cliente<select id="mc_cli" onchange="ACT.updateMultiCobro(this.value)">
+    <div class="full"><label>Cliente<select id="mc_cli" data-f="mc_cli_sel">
       <option value="">-- Seleccionar cliente --</option>
       ${clis.map(c=>`<option value="${c.id}" ${c.id===cid?'selected':''}>${esc(c.nombre)}</option>`).join('')}
     </select></label></div>
@@ -865,8 +864,8 @@ function modalAnDist(cid, y, mNum){
   const aAv = avanceOf(cid, String(y));
 
   openModal(`<h2>${esc(c.nombre)} · ${MESES[mNum-1]} ${y}</h2>
-  ${mItems.length?`<b>Mensuales (${mKey}):</b><div class="obs" style="margin:6px 0 12px">${mItems.map(o=>`<button class="ob ${mAv.done&&mAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${mKey}" data-m="${mNum}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
-  ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-m="${mNum}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
+  ${mItems.length?`<b>Mensuales (${mKey}):</b><div class="obs" style="margin:6px 0 12px">${mItems.map(o=>`<button class="ob ${mAv.done&&mAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${mKey}" data-m="${mNum}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div>`:''}
+  ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-m="${mNum}" data-o="${o.k}">${esc(o.n)}</button>`).join('')}</div>`:''}
   <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
   <div style="display:flex;justify-content:space-between;align-items:center">
     ${c.cobra !== false ? `<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="${cid}" data-m="${MESES[mNum-1]}${y}">+ Registrar cobro/honorario</button>` : '<span></span>'}
@@ -978,13 +977,6 @@ const ACT={
   },
   nuevoCobro:()=>modalCobro(null, '', ''),
   crearCobroDesdeModal:d=>modalCobro(d.c, 'Honorarios / Declaración '+d.m, ''),
-  updateMultiCobro:(cid)=>{
-    const c = S.clientes[cid];
-    if(c && c.tarifa){
-      $('#mc_mon').value = c.tarifa;
-      $('#mc_pag').value = c.tarifa;
-    }
-  },
   saveCobro:async()=>{
     const clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), pagado=+val('mc_pag'), fechaEmision=val('mc_fec'), fechaPago=val('mc_fec_pago');
     if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return}
@@ -1101,9 +1093,21 @@ document.addEventListener('input',e=>{
 });
 
 document.addEventListener('change',e=>{
-  const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
+  const t=e.target,f=t.dataset&&t.dataset.f;
   if(f==='cper'){UI.cper=t.value;render()}
   else if(f==='fgr'){UI.fgr=t.value;render()}
+  else if(f==='srv_sel'){
+    const txt=$('#vk_srv_txt');
+    if(txt) txt.style.display = t.value==='OTRO'?'block':'none';
+  }
+  else if(f==='mc_cli_sel'){
+    const c = S.clientes[t.value];
+    if(c && c.tarifa){
+      const mon=$('#mc_mon'), pag=$('#mc_pag');
+      if(mon) mon.value = c.tarifa;
+      if(pag) pag.value = c.tarifa;
+    }
+  }
 });
 
 UI.cper=defaultPeriod('M');
