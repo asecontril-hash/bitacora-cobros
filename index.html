@@ -95,9 +95,12 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .ob-item{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--bg);padding:6px 8px;border-radius:6px;border:1px solid var(--line)}
 .ob-item input{margin:0}
 .sec-title{font-size:13px;font-weight:700;color:var(--pri);margin-top:8px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+
+/* Garantizar que la zona de impresión no ocupe pantalla */
+#print-area { display: none; }
 @media print {
   body * { visibility: hidden; }
-  #print-area, #print-area * { visibility: visible; }
+  #print-area, #print-area * { visibility: visible; display: block !important; }
   #print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; padding: 20px; font-family: sans-serif; }
 }
 @media (max-width:600px){.fgrid{grid-template-columns:1fr}.kpi .n{font-size:22px}}
@@ -457,7 +460,7 @@ async function saveVaultItems(){
 }
 
 /* ============ VISTAS DE NAVEGACION ============ */
-var TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros y Recibos'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+var TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cuentas por Cobrar'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
   var cfgPass = gateCfg();
@@ -678,30 +681,59 @@ function vClaves(){
   '</div>';
 }
 
+/* Vista de Cuentas por Cobrar Agrupadas por Cliente */
 function vCobros(){
-  var L=cobrosList().map(function(x){ return Object.assign({x:x, c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}, cobroCalc(x)); });
+  var rawList = cobrosList().filter(function(x){ return !x.anulado; });
+  var porCliente = {};
+
+  rawList.forEach(function(x){
+    var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:''};
+    var calc = cobroCalc(x);
+    if(!porCliente[x.clienteId]){
+      porCliente[x.clienteId] = {cliente: c, cid: x.clienteId, totalMonto: 0, totalSaldo: 0, pendientes: []};
+    }
+    porCliente[x.clienteId].totalMonto += x.monto;
+    porCliente[x.clienteId].totalSaldo += calc.saldo;
+    porCliente[x.clienteId].pendientes.push({x: x, calc: calc});
+  });
+
+  var clientesArray = Object.values(porCliente);
+
   return '<div class="bar">'+
-    '<button class="btn pri" data-a="nuevoCobro">+ Nuevo Cobro / Acumulado</button>'+
+    '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button>'+
   '</div>'+
   '<div class="card">'+
-    '<b>📜 Registro General de Cobros y Pagos Realizados</b>'+
-    (L.length?'<div class="tablewrap"><table style="margin-top:10px">'+
-      '<thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Conceptos / Períodos</th><th>Monto Total</th><th>Pagado</th><th>Estado</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+L.map(function(r){
-        var ultAbono = r.x.abonos && r.x.abonos.length ? r.x.abonos[r.x.abonos.length-1].f : r.x.fechaEmision;
-        return '<tr>'+
-        '<td><b>'+fmtDate(ultAbono)+'</b><div class="sm">Emisión: '+fmtDate(r.x.fechaEmision)+'</div></td>'+
-        '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc||'')+'</div></td>'+
-        '<td>'+esc(r.x.concepto||'')+'</td>'+
-        '<td>'+money(r.x.monto)+'</td>'+
-        '<td><b>'+money(r.pagado)+'</b></td>'+
-        '<td>'+estChip(r.est)+'</td>'+
-        '<td>'+
-          '<button class="btn sm" data-a="abonarCobro" data-id="'+r.x.id+'">+ Abono</button> '+
-          '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+r.x.id+'">🖨️ Recibo</button>'+
-        '</td>'+
-      '</tr>';
-      }).join('')+'</tbody></table></div>':'<div class="empty">No hay cobros registrados.</div>')+
+    '<b>📌 Estado de Cuentas por Cobrar Agrupadas por Cliente</b>'+
+    (clientesArray.length ? clientesArray.map(function(group){
+      return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;background:var(--card)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px">'+
+          '<div>'+
+            '<b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+')</span>'+
+          '</div>'+
+          '<div>'+
+            '<span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> '+
+            (group.totalSaldo>0 ? '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Registrar Cobro / Múltiple</button>' : '')+
+          '</div>'+
+        '</div>'+
+        '<div class="tablewrap"><table style="font-size:13px">'+
+          '<thead><tr><th>Emisión / Vencimiento</th><th>Concepto</th><th>Monto Total</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th>Acciones</th></tr></thead>'+
+          '<tbody>'+group.pendientes.map(function(item){
+            return '<tr>'+
+              '<td><b>'+fmtDate(item.x.fechaEmision)+'</b></td>'+
+              '<td>'+esc(item.x.concepto)+'</td>'+
+              '<td>'+money(item.x.monto)+'</td>'+
+              '<td>'+money(item.calc.pagado)+'</td>'+
+              '<td><b style="color:'+(item.calc.saldo>0?'var(--bad)':'var(--ok)')+'">'+money(item.calc.saldo)+'</b></td>'+
+              '<td>'+estChip(item.calc.est)+'</td>'+
+              '<td>'+
+                (item.calc.saldo>0 ? '<button class="btn sm" data-a="abonarCobro" data-id="'+item.x.id+'">+ Abono</button> ' : '')+
+                '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+item.x.id+'">🖨️ Recibo</button>'+
+              '</td>'+
+            '</tr>';
+          }).join('')+'</tbody>'+
+        '</table></div>'+
+      '</div>';
+    }).join('') : '<div class="empty">No hay cuentas por cobrar registradas.</div>')+
   '</div>';
 }
 
@@ -867,28 +899,28 @@ function modalClave(){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>');
 }
 
-function modalCobro(cid, conceptoDef, montoDef){
+/* Modal para Generar Cuenta por Cobrar con Fecha Sugerida de Fin de Mes */
+function modalCobro(cid, conceptoDef, fechaSugerida){
   var clis=activos();
   var targetCli = cid ? S.clientes[cid] : null;
-  var autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
+  var autoMonto = targetCli ? targetCli.tarifa : '';
+  var fEmision = fechaSugerida || todayStr();
 
-  openModal('<h2>Registrar Cobro / Recibo</h2>'+
+  openModal('<h2>Generar Cuenta por Cobrar</h2>'+
   '<div class="fgrid">'+
     '<div class="full"><label>Cliente<select id="mc_cli" data-f="mc_cli_sel">'+
       '<option value="">-- Seleccionar cliente --</option>'+
       clis.map(function(c){ return '<option value="'+c.id+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+'</option>'; }).join('')+
     '</select></label></div>'+
     
-    '<div class="full" id="mc_multi_container">'+
-      '<label>Concepto / Detalle de Servicios Acumulados:<input id="mc_con" value="'+esc(conceptoDef||'Honorarios profesionales')+'"></label>'+
+    '<div class="full">'+
+      '<label>Concepto / Detalle del servicio:<input id="mc_con" value="'+esc(conceptoDef||'Honorarios profesionales')+'"></label>'+
     '</div>'+
 
-    '<div><label>Monto Total A Cobrar ($)<input id="mc_mon" type="number" step="0.01" value="'+(autoMonto||'')+'"></label></div>'+
-    '<div><label>Monto Cobrado Hoy ($)<input id="mc_pag" type="number" step="0.01" value="'+(autoMonto||'')+'"></label></div>'+
-    '<div><label>Fecha de Emisión<input id="mc_fec" type="date" value="'+todayStr()+'"></label></div>'+
-    '<div><label>Fecha de Cobro / Abono<input id="mc_fec_pago" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Monto A Cobrar ($)<input id="mc_mon" type="number" step="0.01" value="'+(autoMonto||'')+'"></label></div>'+
+    '<div><label>Fecha Emisión / Vencimiento<input id="mc_fec" type="date" value="'+fEmision+'"></label></div>'+
   '</div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Registro de Cobro</button></div>');
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar Cuenta por Cobrar</button></div>');
 }
 
 function modalAbono(id){
@@ -896,13 +928,43 @@ function modalAbono(id){
   var c = S.clientes[x.clienteId]||{nombre:'Cliente'};
   var calc = cobroCalc(x);
 
-  openModal('<h2>Abonar a Cobro Pendiente</h2>'+
+  openModal('<h2>Registrar Abono / Cobro</h2>'+
   '<p><b>Cliente:</b> '+esc(c.nombre)+'<br><b>Concepto:</b> '+esc(x.concepto)+'<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">'+money(calc.saldo)+'</span></p>'+
   '<div class="fgrid">'+
-    '<div><label>Monto del Abono ($)<input id="ma_monto" type="number" step="0.01" value="'+calc.saldo+'"></label></div>'+
-    '<div><label>Fecha del Abono<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Monto Cobrado ($)<input id="ma_monto" type="number" step="0.01" value="'+calc.saldo+'"></label></div>'+
+    '<div><label>Fecha de Cobro<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
   '</div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Registrar Abono</button></div>');
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Guardar Pago</button></div>');
+}
+
+/* Modal de Cobro Múltiple */
+function modalCobroMultiple(cid){
+  var c = S.clientes[cid] || {nombre: 'Cliente'};
+  var pends = cobrosList().filter(function(x){ return x.clienteId === cid && !x.anulado && cobroCalc(x).saldo > 0; });
+
+  if(!pends.length){ toast('No hay cuentas pendientes para este cliente'); return; }
+
+  openModal('<h2>Cobro Múltiple / Acumulado · '+esc(c.nombre)+'</h2>'+
+  '<p class="sm">Selecciona las cuentas por cobrar a saldar con este pago:</p>'+
+  '<div class="tablewrap"><table style="font-size:13px">'+
+    '<thead><tr><th>Sel.</th><th>Fecha</th><th>Concepto</th><th>Saldo</th></tr></thead>'+
+    '<tbody>'+pends.map(function(item){
+      var calc = cobroCalc(item);
+      return '<tr>'+
+        '<td><input type="checkbox" class="chk-cobro-mult" data-id="'+item.id+'" data-saldo="'+calc.saldo+'" checked onchange="ACT.calcMultTotal()"></td>'+
+        '<td>'+fmtDate(item.fechaEmision)+'</td>'+
+        '<td>'+esc(item.concepto)+'</td>'+
+        '<td><b>'+money(calc.saldo)+'</b></td>'+
+      '</tr>';
+    }).join('')+'</tbody>'+
+  '</table></div>'+
+  '<div class="fgrid" style="margin-top:12px">'+
+    '<div><label>Monto Total Recibido ($)<input id="mm_total" type="number" step="0.01" readonly></label></div>'+
+    '<div><label>Fecha de Cobro<input id="mm_fec" type="date" value="'+todayStr()+'"></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobroMultiple" data-cid="'+cid+'">Procesar Cobros Seleccionados</button></div>');
+
+  ACT.calcMultTotal();
 }
 
 function modalAnDist(cid, y, mNum){
@@ -913,12 +975,16 @@ function modalAnDist(cid, y, mNum){
   var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
   var aAv = avanceOf(cid, String(y));
 
+  // Calcular el último día del mes (ej. para enero 31-01-2026)
+  var ultimoDiaMes = new Date(y, mNum, 0);
+  var fechaSugeridaStr = ymd(ultimoDiaMes);
+
   openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
   (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(function(o){ return '<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(function(o){ return '<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0">'+
   '<div style="display:flex;justify-content:space-between;align-items:center">'+
-    (c.cobra !== false ? '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'">+ Registrar cobro/honorario</button>' : '<span></span>')+
+    (c.cobra !== false ? '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>' : '<span></span>')+
     '<button class="btn" data-a="close">Listo</button>'+
   '</div>');
 }
@@ -1014,14 +1080,13 @@ var ACT={
     }
   },
   nuevoCobro:function(){ modalCobro(null, '', ''); },
-  crearCobroDesdeModal:function(d){ modalCobro(d.c, 'Honorarios / Declaración '+d.m, ''); },
+  crearCobroDesdeModal:function(d){ modalCobro(d.c, 'Honorarios / Declaración '+d.m, d.fec); },
   saveCobro:async function(){
-    var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), pagado=+val('mc_pag'), fechaEmision=val('mc_fec'), fechaPago=val('mc_fec_pago');
+    var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
     if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return;}
     var id='cb_'+uid();
-    var abonos = pagado > 0 ? [{f:fechaPago||fechaEmision, m:pagado}] : [];
-    await Store.put('cobros',id,{id:id,clienteId:clienteId,concepto:concepto,monto:monto,fechaEmision:fechaEmision,abonos:abonos});
-    closeModal(); toast('Cobro registrado');
+    await Store.put('cobros',id,{id:id,clienteId:clienteId,concepto:concepto,monto:monto,fechaEmision:fechaEmision||todayStr(),abonos:[]});
+    closeModal(); toast('Cuenta por cobrar registrada');
   },
   abonarCobro:function(d){ modalAbono(d.id); },
   saveAbono:async function(d){
@@ -1031,7 +1096,33 @@ var ACT={
     x.abonos = x.abonos || [];
     x.abonos.push({f:fec, m:monto});
     await Store.put('cobros', d.id, x);
-    closeModal(); toast('Abono registrado');
+    closeModal(); toast('Pago registrado');
+  },
+  cobroMultiple:function(d){ modalCobroMultiple(d.cid); },
+  calcMultTotal:function(){
+    var sum = 0;
+    document.querySelectorAll('.chk-cobro-mult:checked').forEach(function(chk){
+      sum += Number(chk.dataset.saldo||0);
+    });
+    var el = $('#mm_total'); if(el) el.value = sum.toFixed(2);
+  },
+  saveCobroMultiple:async function(d){
+    var fec = val('mm_fec');
+    if(!fec){ toast('Ingresa la fecha de cobro'); return; }
+
+    var selectedChecks = document.querySelectorAll('.chk-cobro-mult:checked');
+    if(!selectedChecks.length){ toast('Selecciona al menos una cuenta por cobrar'); return; }
+
+    for(var i=0; i<selectedChecks.length; i++){
+      var id = selectedChecks[i].dataset.id;
+      var saldo = Number(selectedChecks[i].dataset.saldo);
+      var x = clean(S.cobros[id]);
+      x.abonos = x.abonos || [];
+      x.abonos.push({f:fec, m:saldo});
+      await Store.put('cobros', id, x);
+    }
+
+    closeModal(); toast('Cobros procesados correctamente');
   },
   imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
   vSetup:async function(){
@@ -1148,9 +1239,8 @@ document.addEventListener('change',function(e){
   else if(f==='mc_cli_sel'){
     var c = S.clientes[t.value];
     if(c && c.tarifa){
-      var mon=$('#mc_mon'), pag=$('#mc_pag');
+      var mon=$('#mc_mon');
       if(mon) mon.value = c.tarifa;
-      if(pag) pag.value = c.tarifa;
     }
   }
 });
