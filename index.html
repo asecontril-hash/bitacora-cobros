@@ -96,10 +96,8 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .ob-item input{margin:0}
 .sec-title{font-size:13px;font-weight:700;color:var(--pri);margin-top:8px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
 
-/* Ocultar contenedor de impresión en pantalla normal */
 #print-area { display: none; }
 
-/* Estilos limpios para impresión */
 @media print {
   body * { visibility: hidden; }
   #print-area, #print-area * { visibility: visible !important; display: block; }
@@ -161,7 +159,8 @@ var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','se
 
 var DEFAULT_OBL=[
   {k:'F103_104',n:'F103 + F104',f:'P',m:0,d:'RUC'},
-  {k:'F104_SEM',n:'F104 semestral',f:'S',m:0,d:'RUC'},
+  {k:'F104_SEM1',n:'F104 Semestral 1 (Ene-Jun)',f:'S',m:7,d:'RUC'},
+  {k:'F104_SEM2',n:'F104 Semestral 2 (Jul-Dic)',f:'S',m:1,d:'RUC'},
   {k:'ATS',n:'ATS',f:'P',m:0,d:'RUC'},
   {k:'RDEP',n:'RDEP',f:'A',m:1,d:'RUC'},
   {k:'AGP',n:'AGP',f:'A',m:2,d:'RUC'},
@@ -334,7 +333,6 @@ function activos(){ return clientesList().filter(function(c){ return c.activo!==
 function cobrosList(){ return Object.entries(S.cobros||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 function recibosList(){ return Object.entries(S.recibos||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 
-/* Verificación de cobro existente */
 function existeCobro(clienteId, concepto) {
   var conceptoNorm = concepto.trim().toLowerCase();
   return cobrosList().some(function(x){
@@ -342,7 +340,6 @@ function existeCobro(clienteId, concepto) {
   });
 }
 
-/* Filtro estricto por tipo de obligación */
 function oblFor(c, t){
   return getOblList().filter(function(o){
     if(!c.obl || c.obl[o.k] === false) return false;
@@ -568,10 +565,14 @@ function cellInfoAnual(c, y, mNum) {
   var mItems = oblFor(c, 'M');
   var mAv = avanceOf(c.id, mKey);
 
+  var sItemsInMonth = oblFor(c, 'S').filter(function(o){ return (o.m || (o.k.includes('SEM1')?7:1)) === mNum; });
+  var sAv1 = avanceOf(c.id, y + '-S1');
+  var sAv2 = avanceOf(c.id, y + '-S2');
+
   var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
   var aAv = avanceOf(c.id, String(y));
 
-  var totalItems = mItems.length + aItemsInMonth.length;
+  var totalItems = mItems.length + sItemsInMonth.length + aItemsInMonth.length;
   if (totalItems === 0) return { s: 'na' };
 
   var doneCount = 0, hasOverdue = false, minDays = 999;
@@ -580,6 +581,18 @@ function cellInfoAnual(c, y, mNum) {
     if (mAv.done && mAv.done[o.k]) doneCount++;
     else {
       var dd = daysTo(dueDate(c, mKey, o.k));
+      if (dd < 0) hasOverdue = true;
+      if (dd < minDays) minDays = dd;
+    }
+  });
+
+  sItemsInMonth.forEach(function(o){
+    var isS1 = (o.m === 7 || o.k.includes('SEM1'));
+    var targetAv = isS1 ? sAv1 : sAv2;
+    var targetKey = isS1 ? (y + '-S1') : (y + '-S2');
+    if (targetAv.done && targetAv.done[o.k]) doneCount++;
+    else {
+      var dd = daysTo(dueDate(c, targetKey, o.k));
       if (dd < 0) hasOverdue = true;
       if (dd < minDays) minDays = dd;
     }
@@ -838,7 +851,7 @@ function modalCliente(id){
     nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
     contabilidad:false,cobra:true,tarifa:0,
     cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',
-    obl:{F103_104:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
+    obl:{F103_104:true,F104_SEM1:true,F104_SEM2:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
   };
   var cat = getOblList();
 
@@ -894,7 +907,7 @@ function modalObl(key){
       '<option value="S" '+(o.f==='S'?'selected':'')+'>Semestral</option>'+
       '<option value="A" '+(o.f==='A'?'selected':'')+'>Anual</option>'+
     '</select></label></div>'+
-    '<div><label>Mes de Vencimiento (Anuales)<select id="mo_m">'+
+    '<div><label>Mes de Vencimiento / Presentación<select id="mo_m">'+
       '<option value="0">Según período</option>'+
       MESES.map(function(m,idx){ return '<option value="'+(idx+1)+'" '+(o.m===(idx+1)?'selected':'')+'>'+m+'</option>'; }).join('')+
     '</select></label></div>'+
@@ -1022,6 +1035,10 @@ function modalAnDist(cid, y, mNum){
   var mItems = oblFor(c, 'M');
   var mAv = avanceOf(cid, mKey);
 
+  var sItemsInMonth = oblFor(c, 'S').filter(function(o){ return (o.m || (o.k.includes('SEM1')?7:1)) === mNum; });
+  var sAv1 = avanceOf(cid, y + '-S1');
+  var sAv2 = avanceOf(cid, y + '-S2');
+
   var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
   var aAv = avanceOf(cid, String(y));
 
@@ -1032,6 +1049,12 @@ function modalAnDist(cid, y, mNum){
 
   openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
   (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(function(o){ return '<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
+  (sItemsInMonth.length?'<b>Semestrales:</b><div class="obs" style="margin:6px 0 12px">'+sItemsInMonth.map(function(o){
+    var isS1 = (o.m === 7 || o.k.includes('SEM1'));
+    var targetAv = isS1 ? sAv1 : sAv2;
+    var targetKey = isS1 ? (y + '-S1') : (y + '-S2');
+    return '<button class="ob '+(targetAv.done&&targetAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+targetKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>';
+  }).join('')+'</div>':'')+
   (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(function(o){ return '<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0">'+
   '<div style="display:flex;justify-content:space-between;align-items:center">'+
