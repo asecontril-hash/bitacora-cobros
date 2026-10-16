@@ -96,7 +96,6 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .ob-item input{margin:0}
 .sec-title{font-size:13px;font-weight:700;color:var(--pri);margin-top:8px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
 
-/* Garantizar que la zona de impresión no ocupe pantalla */
 #print-area { display: none; }
 @media print {
   body * { visibility: hidden; }
@@ -169,7 +168,6 @@ var DEFAULT_OBL=[
 ];
 
 var DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
-var PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
 var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
 var GATE={logged:false};
@@ -325,34 +323,28 @@ function searchInput(fieldKey, valStr){
 }
 
 function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
-function cobrosList(){ return Object.entries(S.cobros).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
-function desdeOf(c){ return c.desde||'2026-01'; }
+function cobrosList(){ return Object.entries(S.cobros||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 
-function aplica(c,k){
-  var d=desdeOf(c),t=ptype(k);
-  if(k < '2026') return false;
-  if(t==='M') return k>=d;
-  if(t==='S'){ var p=k.split('-S'); return p[0]+'-'+(p[1]==='1'?'06':'12')>=d; }
-  return k+'-12'>=d;
-}
-
-function oblFor(c,t){
+/* Filtro estricto por tipo de obligación */
+function oblFor(c, t){
   return getOblList().filter(function(o){
-    if(!c.obl||c.obl[o.k]===false)return false;
-    if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
-    return o.f==='P' ? true : o.f===t;
+    if(!c.obl || c.obl[o.k] === false) return false;
+    if(o.k === 'SUPERCIAS' && c.tipo !== 'SOCIEDAD') return false;
+    if(t === 'M') return o.f === 'P';
+    if(t === 'S') return o.f === 'S';
+    if(t === 'A') return o.f === 'A';
+    return false;
   });
 }
 
 function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 
 function rowsFor(t,k){
-  if(k < '2026') return [];
   return activos().map(function(c){
-    if(!aplica(c,k))return null;
-    var items=oblFor(c,t);if(!items.length)return null;
+    var items=oblFor(c,t);
+    if(!items.length) return null;
     var av=avanceOf(c.id,k);
-    var done=items.filter(function(o){ return av.done&&av.done[o.k]; }).length;
+    var done=items.filter(function(o){ return av.done && av.done[o.k]; }).length;
     var dues=items.map(function(o){ return dueDate(c,k,o.k); });
     var minDue=new Date(Math.min.apply(null, dues));
     var dd=daysTo(minDue);
@@ -381,10 +373,7 @@ var Store={
     try{ if(window.claude&&window.claude.use) db=await window.claude.use('db'); }catch(e){ db=null; }
     
     setTimeout(function(){
-      if(!S.ready){
-        S.ready=true;
-        render();
-      }
+      if(!S.ready){ S.ready=true; render(); }
     }, 1000);
 
     if(db){
@@ -425,6 +414,15 @@ var Store={
     delete S[col][id]; render();
     if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } }
     else this.saveLocal();
+  },
+  clearCollection: async function(col){
+    S[col] = {}; render();
+    if(this.db){
+      try {
+        var snap = await this.db.collection(col).get();
+        snap.docs.forEach(function(d){ d.ref.delete(); });
+      } catch(e){}
+    } else this.saveLocal();
   }
 };
 
@@ -510,15 +508,16 @@ function vPanel(){
 
 function vControl(){
   var t=UI.ctype, k=UI.cper;
-  var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl)&&!r.complete; });
+  var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl); });
   
-  var vencidos = allRows.filter(function(r){ return r.overdue; });
-  var porVencer = allRows.filter(function(r){ return !r.overdue; });
+  var vencidos = allRows.filter(function(r){ return !r.complete && r.overdue; });
+  var porVencer = allRows.filter(function(r){ return !r.complete && !r.overdue; });
+  var completados = allRows.filter(function(r){ return r.complete; });
   var opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
   var renderTable = function(list){
     return '<div class="tablewrap"><table>'+
-      '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>'+
+      '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th></tr></thead>'+
       '<tbody>'+list.map(function(r){
         return '<tr>'+
           '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
@@ -536,8 +535,9 @@ function vControl(){
   '</div>'+
   (vencidos.length ? '<div class="card" style="border-left:4px solid var(--bad)"><b style="color:var(--bad)">🚨 Declaraciones Vencidas ('+vencidos.length+')</b>'+renderTable(vencidos)+'</div>' : '')+
   '<div class="card" style="border-left:4px solid var(--pri)"><b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo ('+porVencer.length+')</b>'+
-    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes para este período.</div>')+
-  '</div>';
+    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes pendientes en plazo.</div>')+
+  '</div>'+
+  (completados.length ? '<div class="card" style="border-left:4px solid var(--ok)"><b style="color:var(--ok)">✓ Declaraciones Completadas ('+completados.length+')</b>'+renderTable(completados)+'</div>' : '');
 }
 
 function dueChip(r){
@@ -548,8 +548,6 @@ function dueChip(r){
 
 function cellInfoAnual(c, y, mNum) {
   var mKey = monthKey(y, mNum);
-  if (!aplica(c, mKey)) return { s: 'na' };
-
   var mItems = oblFor(c, 'M');
   var mAv = avanceOf(c.id, mKey);
 
@@ -594,7 +592,7 @@ function vAnual(){
     for(var m=1;m<=12;m++) cells.push(cellInfoAnual(c,y,m));
     var act=cells.filter(function(x){ return x.s!=='na'; });
     return {c:c, cells:cells, tot:act.length, ok:act.filter(function(x){return x.s==='ok';}).length, bad:act.filter(function(x){return x.s==='bad';}).length, pend:act.filter(function(x){return x.s!=='ok'&&x.s!=='na';}).length};
-  }).filter(function(r){ return r.tot>0; });
+  });
 
   return '<div class="bar">'+
     '<button class="btn" data-a="ayShift" data-dir="-1" '+(y<=2026?'disabled':'')+'>◀</button>'+
@@ -681,7 +679,6 @@ function vClaves(){
   '</div>';
 }
 
-/* Vista de Cuentas por Cobrar Agrupadas por Cliente */
 function vCobros(){
   var rawList = cobrosList().filter(function(x){ return !x.anulado; });
   var porCliente = {};
@@ -700,7 +697,8 @@ function vCobros(){
   var clientesArray = Object.values(porCliente);
 
   return '<div class="bar">'+
-    '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button>'+
+    '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button> '+
+    '<button class="btn danger" data-a="borrarTodasCuentas">🗑️ Borrar toda la información de cuentas por cobrar</button>'+
   '</div>'+
   '<div class="card">'+
     '<b>📌 Estado de Cuentas por Cobrar Agrupadas por Cliente</b>'+
@@ -899,7 +897,6 @@ function modalClave(){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>');
 }
 
-/* Modal para Generar Cuenta por Cobrar con Fecha Sugerida de Fin de Mes */
 function modalCobro(cid, conceptoDef, fechaSugerida){
   var clis=activos();
   var targetCli = cid ? S.clientes[cid] : null;
@@ -937,7 +934,6 @@ function modalAbono(id){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Guardar Pago</button></div>');
 }
 
-/* Modal de Cobro Múltiple */
 function modalCobroMultiple(cid){
   var c = S.clientes[cid] || {nombre: 'Cliente'};
   var pends = cobrosList().filter(function(x){ return x.clienteId === cid && !x.anulado && cobroCalc(x).saldo > 0; });
@@ -970,12 +966,13 @@ function modalCobroMultiple(cid){
 function modalAnDist(cid, y, mNum){
   var c = S.clientes[cid];
   var mKey = monthKey(y, mNum);
+  
   var mItems = oblFor(c, 'M');
   var mAv = avanceOf(cid, mKey);
+
   var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
   var aAv = avanceOf(cid, String(y));
 
-  // Calcular el último día del mes (ej. para enero 31-01-2026)
   var ultimoDiaMes = new Date(y, mNum, 0);
   var fechaSugeridaStr = ymd(ultimoDiaMes);
 
@@ -1123,6 +1120,12 @@ var ACT={
     }
 
     closeModal(); toast('Cobros procesados correctamente');
+  },
+  borrarTodasCuentas:async function(){
+    if(confirm('¿Estás seguro de que deseas eliminar TODAS las cuentas por cobrar generadas?')){
+      await Store.clearCollection('cobros');
+      toast('Todas las cuentas por cobrar han sido eliminadas');
+    }
   },
   imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
   vSetup:async function(){
