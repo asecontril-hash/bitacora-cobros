@@ -74,8 +74,6 @@ td.r,th.r{text-align:right}
 .ob.done{background:var(--ok-soft);border-color:transparent;color:var(--ok);font-weight:600}
 .ob.done::before{content:"✓ "}
 .empty{text-align:center;color:var(--mut);padding:30px 10px}
-.banner{background:var(--info-soft);color:var(--info);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.banner .grow{flex:1 1 240px}
 #modal .bg{position:fixed;inset:0;background:rgba(10,15,22,.55);display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 12px 16px;overflow:auto;z-index:50}
 #modal .box{background:var(--card);border-radius:14px;width:100%;max-width:560px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.3);margin:auto}
 #modal .box.wide{max-width:720px}
@@ -84,13 +82,9 @@ td.r,th.r{text-align:right}
 .fgrid .full{grid-column:1/-1}
 .fgrid label{display:block;font-size:12.5px;color:var(--mut);font-weight:600}
 .fgrid input,.fgrid select{width:100%;margin-top:3px}
-.checks{display:flex;flex-wrap:wrap;gap:6px 14px}
-.checks label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink);font-weight:500}
-.checks input{width:auto;margin:0}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
-.lnk{color:var(--pri);cursor:pointer;background:none;border:0;padding:0;font:inherit;font-weight:600}
 table.ym th,table.ym td{padding:5px 4px;text-align:center}
 table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:190px;max-width:230px}
 .cl{display:inline-block;min-width:34px;padding:3px 4px;border-radius:7px;font-size:12px;font-weight:700;border:0;font-family:inherit;cursor:pointer}
@@ -130,6 +124,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
   <header class="top">
     <h1>📒 Bitácora de clientes y cobros</h1>
     <span class="sub" id="stat"></span>
+    <button class="btn sm" id="lockbtn" data-a="lockApp" style="display:none">🔒 Bloquear</button>
   </header>
   <nav class="tabs" id="tabs"></nav>
   <main id="main"><div class="empty">Cargando…</div></main>
@@ -138,7 +133,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <div id="toast"></div>
 
 <script>
-/* ============ CONSTANTES FISCALES ============ */
+/* ============ CONSTANTES FISCALES Y CATÁLOGO ============ */
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 const DEFAULT_OBL=[
@@ -161,6 +156,15 @@ const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 const FORMAS=['Efectivo','Transferencia','Depósito','Cheque','Otro'];
 const PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
 const TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
+
+/* ============ ACCESO Y GATE DE CONTRASEÑA ============ */
+const GATE={need:false,pass:''};
+function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
+function checkGate(){
+  const p=gateCfg();
+  if(p&&!GATE.pass) GATE.need=true;
+  else GATE.need=false;
+}
 
 /* ============ ESTADO Y VARIABLES ============ */
 const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
@@ -252,15 +256,10 @@ function daysTo(d){return Math.round((d-midnight())/864e5)}
 
 const clientesList=()=>Object.entries(S.clientes).map(([id,c])=>({...c,id})).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
 const gruposList=()=>[...new Set(clientesList().map(c=>(c.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const refList=()=>[...new Set(clientesList().map(c=>(c.referidoPor||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'')+(c.referidoPor?`<span class="chip mut">🤝 ${esc(c.referidoPor)}</span>`:'');
+const tagsCli=c=>(c.activo===false?`<span class="chip warn">⏸ Suspendido</span> `:'')+(c.grupo?`<span class="chip info">🏢 ${esc(c.grupo)}</span> `:'');
 const inGrp=c=>UI.fgr==='todos'||(UI.fgr==='__sin'?!(c.grupo||'').trim():(c.grupo||'').trim()===UI.fgr);
 const grpSelect=()=>`<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" ${UI.fgr==='__sin'?'selected':''}>Sin grupo</option>${gruposList().map(g=>`<option value="${esc(g)}" ${UI.fgr===g?'selected':''}>🏢 ${esc(g)}</option>`).join('')}</select>`;
 const diaV=c=>DIA_POR_DIGITO[digito9(c.ruc)]||99;
-const byNombre=(a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es');
-const byDia=(a,b)=>diaV(a)-diaV(b)||byNombre(a,b);
-const ordSel=(scr,extra=[])=>`<select data-f="ord" data-s="${scr}">${[...extra,['venc','Ordenar: día vencimiento'],['nombre','Ordenar: razón social']].map(([v,l])=>`<option value="${v}" ${UI.ord[scr]===v?'selected':''}>${l}</option>`).join('')}</select>`;
-const eqMensual=c=>!c.cobra?0:(c.tarifa||0)/({M:1,S:6,A:12}[c.cobroFreq]||1);
 const activos=()=>clientesList().filter(c=>c.activo!==false);
 const cobrosList=()=>Object.entries(S.cobros).map(([id,c])=>({...c,id}));
 function desdeOf(c){return c.desde||(now.getFullYear()+'-01')}
@@ -294,12 +293,6 @@ function cobroCalc(x){
   let est=x.anulado?'anulado':pagado>=monto&&monto>0?'pagado':pagado>0?'parcial':'pendiente';
   return {pagado,saldo,est};
 }
-function nextRecibo(){
-  const y=now.getFullYear();let mx=0;
-  cobrosList().forEach(x=>{const m=/^R-(\d{4})-(\d+)$/.exec(x.numDoc||'');if(m&&+m[1]===y)mx=Math.max(mx,+m[2])});
-  return 'R-'+y+'-'+String(mx+1).padStart(4,'0');
-}
-function cobroDe(cid,k){return cobrosList().find(x=>x.clienteId===cid&&x.periodo===k&&!x.anulado)}
 const estChip=e=>({pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]);
 
 /* ============ BASE DE DATOS ============ */
@@ -317,7 +310,7 @@ const Store={
           S[col]=o;loaded[col]=true;
           if(COLS.every(c=>loaded[c]))S.ready=true;
           render();
-        },err=>{loaded[col]=true;if(COLS.every(c=>loaded[c]))S.ready=true;render();toast('Sin acceso a la base de datos')});
+        },err=>{loaded[col]=true;if(COLS.every(c=>loaded[c]))S.ready=true;render()});
       });
       setTimeout(()=>{if(!S.ready){S.ready=true;render()}},6000);
     }else{
@@ -339,8 +332,8 @@ const Store={
   }
 };
 
-/* ============ CIFRADO BÓVEDA ============ */
-const VAULT={key:null,data:{}};
+/* ============ CIFRADO BÓVEDA Y GESTOR DE CLAVES ============ */
+const VAULT={key:null,data:[]};
 const _enc=new TextEncoder(),_dec=new TextDecoder();
 const b64=buf=>{let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s)};
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -359,12 +352,39 @@ async function decJSON(key,d){
   return JSON.parse(_dec.decode(pt));
 }
 
+async function loadVaultItems(){
+  if(!VAULT.key||!S.boveda.items) { VAULT.data = []; return; }
+  try {
+    VAULT.data = await decJSON(VAULT.key, S.boveda.items);
+  } catch(e) { VAULT.data = []; }
+}
+
+async function saveVaultItems(){
+  if(!VAULT.key) return;
+  const enc = await encJSON(VAULT.key, VAULT.data);
+  await Store.put('boveda', 'items', enc);
+}
+
 /* ============ INTERFAZ Y VISTAS ============ */
 const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
+  checkGate();
+  const lb=$('#lockbtn'); if(lb) lb.style.display=gateCfg()?'':'none';
+
+  if(GATE.need){
+    $('#tabs').innerHTML=''; $('#stat').textContent='';
+    $('#main').innerHTML=`<div class="card" style="max-width:400px;margin:40px auto;text-align:center">
+      <h2>🔒 Acceso Restringido</h2>
+      <p class="sm">Ingresa la contraseña para desbloquear la bitácora:</p>
+      <input type="password" id="g_pass_input" placeholder="Contraseña de acceso" style="width:100%;margin-bottom:12px">
+      <button class="btn pri" data-a="loginGate" style="width:100%">Entrar</button>
+    </div>`;
+    return;
+  }
+
   if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return}
-  $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':S.kind==='local'?'Modo local':'';
+  $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':'Modo local';
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${UI.tab===k?'on':''}" data-a="tab" data-k="${k}">${l}</button>`).join('');
   const v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
@@ -523,9 +543,21 @@ function vClaves(){
     <div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>`;
 
   return `<div class="card">
-    <b>🔒 Bóveda de Claves (Desbloqueada)</b>
-    <p class="sm">Credenciales protegidas cifradas en la nube.</p>
-    <div class="bar"><button class="btn danger" data-a="vLock">Bloquear Bóveda</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <b>🔒 Bóveda de Claves Cifradas</b>
+      <button class="btn danger sm" data-a="vLock">Bloquear Bóveda</button>
+    </div>
+    <div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>
+    ${VAULT.data.length ? `<div class="tablewrap"><table style="min-width:650px">
+      <thead><tr><th>Cliente / Servicio</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>
+      <tbody>${VAULT.data.map((item, idx) => `<tr>
+        <td><b>${esc(item.cliente)}</b><div class="sm">${esc(item.servicio)}</div></td>
+        <td>${esc(item.usuario)}</td>
+        <td><input type="password" value="${esc(item.clave)}" readonly style="border:none;background:none;width:120px" id="vp_${idx}">
+            <button class="btn sm" data-a="showPass" data-i="${idx}">👁</button></td>
+        <td><button class="btn sm danger" data-a="delClave" data-i="${idx}">Eliminar</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty">No hay claves guardadas en la bóveda. Usa "+ Nueva Credencial".</div>'}
   </div>`;
 }
 
@@ -574,9 +606,15 @@ function vGrupos(){
 function vAjustes(){
   return `
   <div class="card" style="max-width:600px">
-    <b>Configuración y Respaldos</b>
-    <p class="sm">Guarda tus datos o restáuralos en cualquier momento.</p>
-    <button class="btn" data-a="respaldo">Descargar respaldo JSON</button>
+    <b>Configuración de Seguridad</b>
+    <p class="sm">Configura la clave de acceso para bloquear la bitácora al ingresar.</p>
+    <div class="fgrid">
+      <div class="full"><label>Nueva Clave de Acceso<input type="password" id="set_gate_pass" value="${esc(gateCfg())}"></label></div>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <button class="btn pri" data-a="saveGatePass">Guardar Clave de Acceso</button>
+      ${gateCfg()?`<button class="btn danger" data-a="removeGatePass">Quitar Clave</button>`:''}
+    </div>
   </div>`;
 }
 
@@ -600,24 +638,15 @@ function modalCliente(id){
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar</button></div>`);
 }
 
-function modalObl(key){
-  const OBL = getOblList();
-  const o = key ? OBL.find(item => item.k === key) : { k: '', n: '', f: 'A', m: 1, d: 'RUC' };
-  openModal(`<h2>${key ? 'Editar obligación' : 'Nueva obligación'}</h2>
+function modalClave(){
+  openModal(`<h2>Nueva Credencial Cifrada</h2>
   <div class="fgrid">
-    <div><label>Código / Clave (ej: PM)<input id="o_key" value="${esc(o.k)}" ${key ? 'disabled' : ''}></label></div>
-    <div><label>Nombre legible<input id="o_nom" value="${esc(o.n)}"></label></div>
-    <div><label>Frecuencia<select id="o_freq">
-      <option value="A" ${o.f === 'A' ? 'selected' : ''}>Anual</option>
-      <option value="S" ${o.f === 'S' ? 'selected' : ''}>Semestral</option>
-      <option value="P" ${o.f === 'P' ? 'selected' : ''}>Mensual</option>
-    </select></label></div>
-    <div><label>Mes de vencimiento<select id="o_mes">
-      ${MESES.map((m, idx) => `<option value="${idx + 1}" ${o.m === (idx + 1) ? 'selected' : ''}>${m}</option>`).join('')}
-    </select></label></div>
-    <div class="full"><label>Día de Vencimiento<input id="o_dia" value="${esc(o.d)}" placeholder="Escribe RUC o un número fijo"></label></div>
+    <div class="full"><label>Cliente / Nombre<input id="vk_cli" placeholder="ej. Comercial Ron"></label></div>
+    <div><label>Servicio<input id="vk_srv" placeholder="ej. SRI, IESS, Supercias"></label></div>
+    <div><label>Usuario / RUC<input id="vk_usr"></label></div>
+    <div class="full"><label>Contraseña / Pin<input id="vk_pwd" type="text"></label></div>
   </div>
-  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-k="${key || ''}">Guardar</button></div>`);
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>`);
 }
 
 function modalAnDist(cid, y, mNum){
@@ -639,36 +668,56 @@ const ACT={
   tab:d=>{UI.tab=d.k;render()},
   ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
   ayShift:d=>{UI.ay+=+d.dir;render()},
-  toggle:d=>{
-    const id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
-    if(av.done[d.o])delete av.done[d.o];else av.done[d.o]=true;
-    Store.put('avances',id,av);
+  loginGate:()=>{
+    const p=val('g_pass_input');
+    if(p===gateCfg()){ GATE.pass=p; GATE.need=false; render(); }
+    else toast('Contraseña incorrecta');
+  },
+  lockApp:()=>{ GATE.pass=''; GATE.need=true; render(); },
+  saveGatePass:()=>{
+    const p=val('set_gate_pass').trim();
+    if(p){ localStorage.setItem('bitacora_gate_pass',p); toast('Clave de acceso guardada'); }
+    else { localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); }
+    render();
+  },
+  removeGatePass:()=>{ localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); render(); },
+  toggle:async d=>{
+    const id=d.c+'__'+d.k, av=clean(avanceOf(d.c,d.k)); av.clienteId=d.c; av.periodo=d.k; av.done=av.done||{};
+    if(av.done[d.o]) delete av.done[d.o]; else av.done[d.o]=true;
+    await Store.put('avances',id,av);
+    if($('#modal').firstChild) modalAnDist(d.c, UI.ay, Number(d.k.split('-')[1]) || 1);
   },
   vSetup:async()=>{
     const p=val('v_pass');
     if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return}
     const salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter);
     await Store.put('boveda','meta',{salt:b64(salt),iter,check:await encJSON(key,{ok:'BITACORA'})});
-    VAULT.key=key;render();toast('Bóveda lista');
+    VAULT.key=key; render(); toast('Bóveda configurada');
   },
   vUnlock:async()=>{
     const p=val('v_pass'),m=S.boveda.meta;
     try{
       const key=await deriveKey(p,unb64(m.salt),m.iter);
       const ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
-      VAULT.key=key;render();toast('Bóveda abierta');
+      VAULT.key=key; await loadVaultItems(); render(); toast('Bóveda abierta');
     }catch(e){toast('Clave incorrecta')}
   },
-  vLock:()=>{VAULT.key=null;render();toast('Bóveda bloqueada')},
-  nuevaObl:()=>modalObl(null),
-  saveObl:d=>{
-    const k = d.k || val('o_key').trim().toUpperCase();
-    const n = val('o_nom').trim();
-    if(!k||!n){toast('Ingresa código y nombre');return}
-    const item={k,n,f:val('o_freq'),m:Number(val('o_mes'))||1,d:val('o_dia').trim()==='RUC'?'RUC':(Number(val('o_dia'))||'RUC')};
-    Store.put('catObl',k,item);closeModal();toast('Obligación guardada');
+  vLock:()=>{VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada')},
+  nuevaClave:()=>modalClave(),
+  saveClave:async()=>{
+    const cli=val('vk_cli').trim(), srv=val('vk_srv').trim(), usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim();
+    if(!cli||!usr||!pwd){toast('Completa todos los campos');return}
+    VAULT.data.push({cliente:cli,servicio:srv||'SRI',usuario:usr,clave:pwd});
+    await saveVaultItems(); closeModal(); render(); toast('Credencial guardada');
   },
-  delObl:d=>{Store.del('catObl',d.k);toast('Obligación eliminada')},
+  delClave:async d=>{
+    VAULT.data.splice(Number(d.i),1);
+    await saveVaultItems(); render(); toast('Credencial eliminada');
+  },
+  showPass:d=>{
+    const el=$('#vp_'+d.i);
+    if(el) el.type = el.type==='password'?'text':'password';
+  },
   nuevoCliente:()=>modalCliente(null),
   editCliente:d=>modalCliente(d.id),
   saveCliente:d=>{
