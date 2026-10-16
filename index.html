@@ -187,8 +187,14 @@ var UI={
 };
 
 function getOblList(){
-  var custom = Object.values(S.catObl||{});
-  return custom.length > 0 ? custom : DEFAULT_OBL;
+  var dict = {};
+  DEFAULT_OBL.forEach(function(o){ dict[o.k] = Object.assign({}, o); });
+  if(S.catObl){
+    Object.keys(S.catObl).forEach(function(k){
+      if(S.catObl[k]) dict[k] = S.catObl[k];
+    });
+  }
+  return Object.values(dict);
 }
 
 function $(s){ return document.querySelector(s); }
@@ -531,6 +537,12 @@ function vControl(){
   '</div>';
 }
 
+function dueChip(r){
+  if(r.complete)return '<span class="chip ok">Completo</span>';
+  if(r.dd<0)return '<span class="chip bad">Vencido hace '+(-r.dd)+' d · '+fmtD(r.due)+'</span>';
+  return '<span class="chip '+(r.dd<=7?'warn':'info')+'">Vence en '+r.dd+' d · '+fmtD(r.due)+'</span>';
+}
+
 function cellInfoAnual(c, y, mNum) {
   var mKey = monthKey(y, mNum);
   if (!aplica(c, mKey)) return { s: 'na' };
@@ -701,13 +713,18 @@ function vClientes(){
   '</div>'+
   '<div class="card">'+
   (L.length?'<div class="tablewrap"><table>'+
-    '<thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>'+
+    '<thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Estado</th><th>Acciones</th></tr></thead>'+
     '<tbody>'+L.map(function(c){
+      var isAct = c.activo !== false;
       return '<tr>'+
         '<td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td>'+
         '<td>'+esc(c.ruc)+'</td><td>'+esc(c.tipo)+'</td>'+
         '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b><div class="sm">'+(c.doc==='factura'?'Factura':'Recibo interno')+'</div></td>'+
-        '<td><button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button></td>'+
+        '<td>'+(isAct ? '<span class="chip ok">Activo</span>' : '<span class="chip warn">⏸ Suspendido</span>')+'</td>'+
+        '<td>'+
+          '<button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button> '+
+          '<button class="btn sm '+(isAct?'danger':'pri')+'" data-a="toggleSuspend" data-id="'+c.id+'">'+(isAct?'⏸ Suspender':'▶ Activar')+'</button>'+
+        '</td>'+
       '</tr>';
     }).join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes coincidentes.</div>')+
   '</div>';
@@ -774,6 +791,7 @@ function modalCliente(id){
     '<div><label>RUC<input id="m_ruc" value="'+esc(c.ruc)+'"></label></div>'+
     '<div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" '+(c.tipo==='PERSONA NATURAL'?'selected':'')+'>Persona Natural</option><option value="SOCIEDAD" '+(c.tipo==='SOCIEDAD'?'selected':'')+'>Sociedad</option></select></label></div>'+
     '<div class="full"><label>Grupo / Holding<input id="m_grupo" value="'+esc(c.grupo)+'"></label></div>'+
+    '<div><label>Estado del Cliente<select id="m_activo"><option value="true" '+(c.activo!==false?'selected':'')+'>Activo</option><option value="false" '+(c.activo===false?'selected':'')+'>⏸ Suspendido</option></select></label></div>'+
     
     '<div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">'+
       '<b>Condiciones Comerciales y de Cobro:</b>'+
@@ -978,18 +996,11 @@ var ACT={
     var k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d');
     if(!k||!n){toast('Ingresa código y nombre');return;}
     
-    if(Object.keys(S.catObl).length===0){
-      DEFAULT_OBL.forEach(function(o){ S.catObl[o.k]=o; });
-    }
-    
     var item = {k:k, n:n, f:f, m:m, d: dVal==='RUC'?'RUC':+dVal};
     await Store.put('catObl', k, item);
     closeModal(); toast('Obligación guardada');
   },
   delObl:async function(d){
-    if(Object.keys(S.catObl).length===0){
-      DEFAULT_OBL.forEach(function(o){ S.catObl[o.k]=o; });
-    }
     await Store.del('catObl', d.k);
     toast('Obligación eliminada');
   },
@@ -1063,6 +1074,13 @@ var ACT={
   },
   nuevoCliente:function(){ modalCliente(null); },
   editCliente:function(d){ modalCliente(d.id); },
+  toggleSuspend:async function(d){
+    var c = clean(S.clientes[d.id]);
+    if(!c) return;
+    c.activo = c.activo === false;
+    await Store.put('clientes', d.id, c);
+    toast(c.activo ? 'Cliente reactivado' : 'Cliente suspendido');
+  },
   saveCliente:function(d){
     var nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim();
     if(!nombre||!ruc){toast('Llena nombre y RUC');return;}
@@ -1077,11 +1095,11 @@ var ACT={
       ruc:ruc,
       tipo:val('m_tipo'),
       grupo:val('m_grupo').trim(),
+      activo: val('m_activo') === 'true',
       cobra: val('m_cobra') === 'true',
       tarifa: +val('m_tarifa') || 0,
       cobroFreq: val('m_cobroFreq'),
       doc: val('m_doc'),
-      activo: true,
       obl: oblMap
     };
 
