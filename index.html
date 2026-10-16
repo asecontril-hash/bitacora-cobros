@@ -356,14 +356,13 @@ function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 function rowsFor(t,k){
   return activos().map(function(c){
     var items = oblFor(c, t);
-    if(!items.length) return null;
     var av = avanceOf(c.id, k);
     var done = items.filter(function(o){ return av.done && av.done[o.k]; }).length;
-    var dues = items.map(function(o){ return dueDate(c, k, o.k); });
+    var dues = items.length ? items.map(function(o){ return dueDate(c, k, o.k); }) : [new Date()];
     var minDue = new Date(Math.min.apply(null, dues));
     var dd = daysTo(minDue);
-    return {c:c, items:items, av:av, done:done, total:items.length, due:minDue, dd:dd, complete:done===items.length, overdue:dd<0&&done<items.length};
-  }).filter(Boolean);
+    return {c:c, items:items, av:av, done:done, total:items.length, due:minDue, dd:dd, complete: items.length > 0 && done===items.length, overdue:dd<0&&done<items.length};
+  });
 }
 
 function cobroCalc(x){
@@ -498,7 +497,7 @@ function render(){
 }
 
 function vPanel(){
-  var k=defaultPeriod('M'), rows=rowsFor('M',k);
+  var k=defaultPeriod('M'), rows=rowsFor('M',k).filter(function(r){ return r.total > 0; });
   var venc=rows.filter(function(r){return r.overdue;}).length;
   var comp=rows.filter(function(r){return r.complete;}).length;
   var cs=cobrosList().filter(function(x){return !x.anulado;}).map(function(x){ return Object.assign({x:x}, cobroCalc(x)); });
@@ -524,19 +523,26 @@ function vControl(){
   var t=UI.ctype, k=UI.cper;
   var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl); });
   
-  var vencidos = allRows.filter(function(r){ return !r.complete && r.overdue; });
-  var porVencer = allRows.filter(function(r){ return !r.complete && !r.overdue; });
-  var completados = allRows.filter(function(r){ return r.complete; });
+  var vencidos = allRows.filter(function(r){ return r.total > 0 && !r.complete && r.overdue; });
+  var porVencer = allRows.filter(function(r){ return r.total > 0 && !r.complete && !r.overdue; });
+  var completados = allRows.filter(function(r){ return r.total > 0 && r.complete; });
+  var sinObligaciones = allRows.filter(function(r){ return r.total === 0; });
+
   var opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
   var renderTable = function(list){
     return '<div class="tablewrap"><table>'+
-      '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones</th></tr></thead>'+
+      '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones ('+TIPOLBL[t]+')</th></tr></thead>'+
       '<tbody>'+list.map(function(r){
         return '<tr>'+
           '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
-          '<td>'+dueChip(r)+'</td>'+
-          '<td><div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div></td>'+
+          '<td>'+(r.total > 0 ? dueChip(r) : '<span class="chip mut">Sin obligaciones</span>')+'</td>'+
+          '<td>'+
+            (r.total > 0 ? 
+              '<div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>' : 
+              '<span class="sm">No tiene obligaciones '+TIPOLBL[t].toLowerCase()+'s asignadas.</span> <button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️ Asignar</button>'
+            )+
+          '</td>'+
         '</tr>';
       }).join('')+'</tbody></table></div>';
   };
@@ -549,9 +555,10 @@ function vControl(){
   '</div>'+
   (vencidos.length ? '<div class="card" style="border-left:4px solid var(--bad)"><b style="color:var(--bad)">🚨 Declaraciones Vencidas ('+vencidos.length+')</b>'+renderTable(vencidos)+'</div>' : '')+
   '<div class="card" style="border-left:4px solid var(--pri)"><b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo ('+porVencer.length+')</b>'+
-    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes en plazo.</div>')+
+    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes en plazo para esta frecuencia.</div>')+
   '</div>'+
-  (completados.length ? '<div class="card" style="border-left:4px solid var(--ok)"><b style="color:var(--ok)">✓ Declaraciones Completadas ('+completados.length+')</b>'+renderTable(completados)+'</div>' : '');
+  (completados.length ? '<div class="card" style="border-left:4px solid var(--ok)"><b style="color:var(--ok)">✓ Declaraciones Completadas ('+completados.length+')</b>'+renderTable(completados)+'</div>' : '')+
+  (sinObligaciones.length ? '<div class="card"><b style="color:var(--mut)">ℹ️ Clientes sin Obligaciones '+TIPOLBL[t]+'s ('+sinObligaciones.length+')</b>'+renderTable(sinObligaciones)+'</div>' : '');
 }
 
 function dueChip(r){
