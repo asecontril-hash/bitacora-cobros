@@ -141,20 +141,20 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 /* ============ CONSTANTES FISCALES ============ */
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
-const OBL=[
-  {k:'F103_104',n:'F103 + F104',f:'P'},
-  {k:'F104_SEM',n:'F104 semestral',f:'S'},
-  {k:'ATS',n:'ATS',f:'P'},
-  {k:'RDEP',n:'RDEP',f:'A',m:1},
-  {k:'AGP',n:'AGP',f:'A',m:2},
-  {k:'APS',n:'APS',f:'A',m:2},
-  {k:'IM_RTA',n:'Imp. Renta',f:'A',m:3},
-  {k:'SUPERCIAS',n:'Supercias',f:'A',m:4},
-  {k:'ADI',n:'ADI',f:'A',m:5},
-  {k:'D_PATRIM',n:'D. Patrimonial',f:'A',m:5},
-  {k:'PM',n:'Patente Municipal',f:'A',m:6},
-  {k:'S14',n:'14.º sueldo',f:'A',m:8},
-  {k:'S13',n:'13.er sueldo',f:'A',m:12}
+const DEFAULT_OBL=[
+  {k:'F103_104',n:'F103 + F104',f:'P',m:0,d:'RUC'},
+  {k:'F104_SEM',n:'F104 semestral',f:'S',m:0,d:'RUC'},
+  {k:'ATS',n:'ATS',f:'P',m:0,d:'RUC'},
+  {k:'RDEP',n:'RDEP',f:'A',m:1,d:'RUC'},
+  {k:'AGP',n:'AGP',f:'A',m:2,d:'RUC'},
+  {k:'APS',n:'APS',f:'A',m:2,d:'RUC'},
+  {k:'IM_RTA',n:'Imp. Renta',f:'A',m:3,d:'RUC'},
+  {k:'SUPERCIAS',n:'Supercias',f:'A',m:4,d:30},
+  {k:'ADI',n:'ADI',f:'A',m:5,d:'RUC'},
+  {k:'D_PATRIM',n:'D. Patrimonial',f:'A',m:5,d:'RUC'},
+  {k:'PM',n:'Patente Municipal',f:'A',m:6,d:'RUC'},
+  {k:'S14',n:'14.º sueldo',f:'A',m:8,d:31},
+  {k:'S13',n:'13.er sueldo',f:'A',m:12,d:24}
 ];
 
 const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
@@ -163,10 +163,15 @@ const PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
 const TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
 /* ============ ESTADO Y VARIABLES ============ */
-const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},ready:false,kind:'…'};
+const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
 const loaded={};
 const now=new Date();
 const UI={ay:new Date().getFullYear(),asolo:false,tab:'panel',ctype:'M',cper:null,q:'',solo:false,fest:'todos',fdoc:'todos',cq:'',clq:'',clver:'activos',cgrp:'todos',fgr:'todos',qgr:'',ord:{panel:'default',control:'venc',anual:'pend',cobros:'emision',clientes:'nombre',grupos:'nombre'}};
+
+function getOblList(){
+  const custom = Object.values(S.catObl||{});
+  return custom.length > 0 ? custom : DEFAULT_OBL;
+}
 
 /* ============ UTILIDADES ============ */
 const $=s=>document.querySelector(s);
@@ -207,33 +212,31 @@ function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
 
 function dueDate(c, k, oblKey) {
   const digito = digito9(c.ruc);
-  const dia = DIA_POR_DIGITO[digito] || 28;
+  const diaRuc = DIA_POR_DIGITO[digito] || 28;
   const t = ptype(k);
 
   if (t === 'M') {
     const [y, m] = k.split('-').map(Number);
-    return new Date(y, m, dia);
+    return new Date(y, m, diaRuc);
   }
   if (t === 'S') {
     const [y, s] = k.split('-S');
-    return s === '1' ? new Date(+y, 6, dia) : new Date(+y + 1, 0, dia);
+    return s === '1' ? new Date(+y, 6, diaRuc) : new Date(+y + 1, 0, diaRuc);
   }
   if (t === 'A') {
     const y = +k;
-    let mes = 2;
-    let diaEsp = dia;
+    const target = getOblList().find(o => o.k === oblKey);
+    let mesIndex = 2;
+    let diaEspecifico = diaRuc;
 
-    switch (oblKey) {
-      case 'RDEP': mes = 0; break;
-      case 'AGP': case 'APS': mes = 1; break;
-      case 'IM_RTA': mes = c.tipo === 'SOCIEDAD' ? 3 : 2; break;
-      case 'SUPERCIAS': mes = 3; diaEsp = 30; break;
-      case 'ADI': case 'D_PATRIM': mes = 4; break;
-      case 'PM': mes = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6; break;
-      case 'S14': mes = 7; diaEsp = 31; break;
-      case 'S13': mes = 11; diaEsp = 24; break;
+    if (target) {
+      mesIndex = (target.m && target.m >= 1) ? target.m - 1 : 2;
+      if (target.d !== 'RUC' && Number(target.d) > 0) diaEspecifico = Number(target.d);
     }
-    return new Date(y + 1, mes, diaEsp);
+    if (oblKey === 'IM_RTA') mesIndex = c.tipo === 'SOCIEDAD' ? 3 : 2;
+    else if (oblKey === 'PM') mesIndex = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6;
+
+    return new Date(y + 1, mesIndex, diaEspecifico);
   }
   return new Date();
 }
@@ -241,7 +244,7 @@ function dueDate(c, k, oblKey) {
 function oblMonthIndex(c, oblKey) {
   if (oblKey === 'IM_RTA') return c.tipo === 'SOCIEDAD' ? 4 : 3;
   if (oblKey === 'PM') return (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 6 : 7;
-  const target = OBL.find(o => o.k === oblKey);
+  const target = getOblList().find(o => o.k === oblKey);
   return target && target.m ? target.m : 3;
 }
 
@@ -268,7 +271,7 @@ function aplica(c,k){
   return k+'-12'>=d;
 }
 function oblFor(c,t){
-  return OBL.filter(o=>{
+  return getOblList().filter(o=>{
     if(!c.obl||!c.obl[o.k])return false;
     if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
     return o.f==='P'?PERCODE[c.periodicidad]===t:o.f===t;
@@ -300,7 +303,7 @@ function cobroDe(cid,k){return cobrosList().find(x=>x.clienteId===cid&&x.periodo
 const estChip=e=>({pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]);
 
 /* ============ BASE DE DATOS ============ */
-const COLS=['clientes','cobros','avances','config','boveda'];
+const COLS=['clientes','cobros','avances','config','boveda','catObl'];
 const Store={
   db:null,
   async init(){
@@ -336,14 +339,34 @@ const Store={
   }
 };
 
-/* ============ INTERFAZ Y VISTAS COMPLETAS ============ */
-const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+/* ============ CIFRADO BÓVEDA ============ */
+const VAULT={key:null,data:{}};
+const _enc=new TextEncoder(),_dec=new TextDecoder();
+const b64=buf=>{let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+
+async function deriveKey(pass,salt,iter){
+  const km=await crypto.subtle.importKey('raw',_enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iter,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function encJSON(key,obj){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,_enc.encode(JSON.stringify(obj)));
+  return {iv:b64(iv),ct:b64(ct)};
+}
+async function decJSON(key,d){
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},key,unb64(d.ct));
+  return JSON.parse(_dec.decode(pt));
+}
+
+/* ============ INTERFAZ Y VISTAS ============ */
+const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
   if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return}
   $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':S.kind==='local'?'Modo local':'';
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${UI.tab===k?'on':''}" data-a="tab" data-k="${k}">${l}</button>`).join('');
-  const v={panel:vPanel,control:vControl,anual:vAnual,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
+  const v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
 }
 
@@ -394,7 +417,6 @@ function dueChip(r){
   return `<span class="chip ${r.dd<=7?'warn':'info'}">Vence en ${r.dd} d · ${fmtD(r.due)}</span>`;
 }
 
-/* ---- RESUMEN ANUAL CON MATRIZ MES A MES ---- */
 function cellInfoAnual(c, y, mNum) {
   const mKey = monthKey(y, mNum);
   if (!aplica(c, mKey)) return { s: 'na' };
@@ -467,6 +489,46 @@ function vAnual(){
   </div>`;
 }
 
+function vCatObl(){
+  const list = getOblList();
+  return `
+  <div class="bar"><button class="btn pri" data-a="nuevaObl">+ Nueva obligación</button></div>
+  <div class="card">
+    <b>Catálogo de obligaciones fiscales</b>
+    <p class="sm">Configura códigos, frecuencias y meses de vencimiento. Se aplicará automáticamente a la matriz.</p>
+    <div class="tablewrap"><table style="min-width:700px">
+      <thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acción</th></tr></thead>
+      <tbody>${list.map(o=>`<tr>
+        <td><b>${esc(o.k)}</b></td>
+        <td>${esc(o.n)}</td>
+        <td>${o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual'}</td>
+        <td>${o.m?MESES[o.m-1]:'—'}</td>
+        <td>${o.d==='RUC'?'9.º dígito RUC':o.d}</td>
+        <td><button class="btn sm danger" data-a="delObl" data-k="${esc(o.k)}">Eliminar</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function vClaves(){
+  const meta=S.boveda.meta;
+  if(!meta) return `<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b>
+    <p class="sm">Ingresa una clave maestra para cifrar las contraseñas de tus clientes.</p>
+    <div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>
+    <div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>`;
+  
+  if(!VAULT.key) return `<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda de Claves</b>
+    <p class="sm">Ingresa tu clave maestra para ver o editar las credenciales.</p>
+    <div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>
+    <div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>`;
+
+  return `<div class="card">
+    <b>🔒 Bóveda de Claves (Desbloqueada)</b>
+    <p class="sm">Credenciales protegidas cifradas en la nube.</p>
+    <div class="bar"><button class="btn danger" data-a="vLock">Bloquear Bóveda</button></div>
+  </div>`;
+}
+
 function vCobros(){
   let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
   return `
@@ -509,8 +571,6 @@ function vGrupos(){
   </div>`;
 }
 
-function vClaves(){return `<div class="card"><b>🔒 Bóveda de Claves</b><p class="sm">Tus credenciales SRI y sistemas protegidos.</p></div>`;}
-
 function vAjustes(){
   return `
   <div class="card" style="max-width:600px">
@@ -526,7 +586,6 @@ function openModal(html,wide){
 }
 function closeModal(){$('#modal').innerHTML=''}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
-const chk=id=>{const e=document.getElementById(id);return !!(e&&e.checked)};
 
 function modalCliente(id){
   const c=id?S.clientes[id]:{nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',periodicidad:'MENSUAL',contabilidad:false,cobra:true,tarifa:0,cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',obl:{},activo:true};
@@ -539,6 +598,26 @@ function modalCliente(id){
     <div><label>Grupo de Empresa<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
   </div>
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar</button></div>`);
+}
+
+function modalObl(key){
+  const OBL = getOblList();
+  const o = key ? OBL.find(item => item.k === key) : { k: '', n: '', f: 'A', m: 1, d: 'RUC' };
+  openModal(`<h2>${key ? 'Editar obligación' : 'Nueva obligación'}</h2>
+  <div class="fgrid">
+    <div><label>Código / Clave (ej: PM)<input id="o_key" value="${esc(o.k)}" ${key ? 'disabled' : ''}></label></div>
+    <div><label>Nombre legible<input id="o_nom" value="${esc(o.n)}"></label></div>
+    <div><label>Frecuencia<select id="o_freq">
+      <option value="A" ${o.f === 'A' ? 'selected' : ''}>Anual</option>
+      <option value="S" ${o.f === 'S' ? 'selected' : ''}>Semestral</option>
+      <option value="P" ${o.f === 'P' ? 'selected' : ''}>Mensual</option>
+    </select></label></div>
+    <div><label>Mes de vencimiento<select id="o_mes">
+      ${MESES.map((m, idx) => `<option value="${idx + 1}" ${o.m === (idx + 1) ? 'selected' : ''}>${m}</option>`).join('')}
+    </select></label></div>
+    <div class="full"><label>Día de Vencimiento<input id="o_dia" value="${esc(o.d)}" placeholder="Escribe RUC o un número fijo"></label></div>
+  </div>
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-k="${key || ''}">Guardar</button></div>`);
 }
 
 function modalAnDist(cid, y, mNum){
@@ -565,12 +644,37 @@ const ACT={
     if(av.done[d.o])delete av.done[d.o];else av.done[d.o]=true;
     Store.put('avances',id,av);
   },
+  vSetup:async()=>{
+    const p=val('v_pass');
+    if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return}
+    const salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter);
+    await Store.put('boveda','meta',{salt:b64(salt),iter,check:await encJSON(key,{ok:'BITACORA'})});
+    VAULT.key=key;render();toast('Bóveda lista');
+  },
+  vUnlock:async()=>{
+    const p=val('v_pass'),m=S.boveda.meta;
+    try{
+      const key=await deriveKey(p,unb64(m.salt),m.iter);
+      const ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
+      VAULT.key=key;render();toast('Bóveda abierta');
+    }catch(e){toast('Clave incorrecta')}
+  },
+  vLock:()=>{VAULT.key=null;render();toast('Bóveda bloqueada')},
+  nuevaObl:()=>modalObl(null),
+  saveObl:d=>{
+    const k = d.k || val('o_key').trim().toUpperCase();
+    const n = val('o_nom').trim();
+    if(!k||!n){toast('Ingresa código y nombre');return}
+    const item={k,n,f:val('o_freq'),m:Number(val('o_mes'))||1,d:val('o_dia').trim()==='RUC'?'RUC':(Number(val('o_dia'))||'RUC')};
+    Store.put('catObl',k,item);closeModal();toast('Obligación guardada');
+  },
+  delObl:d=>{Store.del('catObl',d.k);toast('Obligación eliminada')},
   nuevoCliente:()=>modalCliente(null),
   editCliente:d=>modalCliente(d.id),
   saveCliente:d=>{
     const nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim();
     if(!nombre||!ruc){toast('Llena nombre y RUC');return}
-    const c={nombre,ruc,tipo:val('m_tipo'),periodicidad:val('m_per'),grupo:val('m_grupo').trim(),activo:true,cobra:true,obl:{F103_104:true,IM_RTA:true,PM:true}};
+    const c={nombre,ruc,tipo:val('m_tipo'),periodicidad:val('m_per'),grupo:val('m_grupo').trim(),activo:true,cobra:true,obl:{F103_104:true,IM_RTA:true,PM:true,RDEP:true}};
     Store.put('clientes',d.id||('c'+ruc),c);closeModal();toast('Cliente guardado');
   },
   anCellDist:d=>modalAnDist(d.c, +d.y, +d.m),
