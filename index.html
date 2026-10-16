@@ -99,7 +99,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 /* Ocultar contenedor de impresión en pantalla normal */
 #print-area { display: none; }
 
-/* Estilos limpios y aislados para impresión */
+/* Estilos limpios para impresión */
 @media print {
   body * { visibility: hidden; }
   #print-area, #print-area * { visibility: visible !important; display: block; }
@@ -334,6 +334,14 @@ function activos(){ return clientesList().filter(function(c){ return c.activo!==
 function cobrosList(){ return Object.entries(S.cobros||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 function recibosList(){ return Object.entries(S.recibos||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 
+/* Verificación de cobro existente */
+function existeCobro(clienteId, concepto) {
+  var conceptoNorm = concepto.trim().toLowerCase();
+  return cobrosList().some(function(x){
+    return x.clienteId === clienteId && !x.anulado && (x.concepto || '').trim().toLowerCase() === conceptoNorm;
+  });
+}
+
 /* Filtro estricto por tipo de obligación */
 function oblFor(c, t){
   return getOblList().filter(function(o){
@@ -348,7 +356,6 @@ function oblFor(c, t){
 
 function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 
-/* Corrección: Retorna las obligaciones del cliente para el período sin bloquear por "desde" */
 function rowsFor(t,k){
   return activos().map(function(c){
     var items = oblFor(c, t);
@@ -737,6 +744,7 @@ function vCobros(){
               '<td>'+
                 (item.calc.saldo>0 ? '<button class="btn sm" data-a="abonarCobro" data-id="'+item.x.id+'">+ Abono / Pago</button> ' : '')+
                 (item.x.reciboId ? '<button class="btn sm pri" data-a="imprimirReciboMult" data-rid="'+item.x.reciboId+'">🖨️ Recibo</button>' : '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+item.x.id+'">🖨️ Recibo</button>')+
+                ' <button class="btn sm danger" data-a="eliminarCobroIndividual" data-id="'+item.x.id+'">🗑️</button>'+
               '</td>'+
             '</tr>';
           }).join('')+'</tbody>'+
@@ -1019,13 +1027,19 @@ function modalAnDist(cid, y, mNum){
 
   var ultimoDiaMes = new Date(y, mNum, 0);
   var fechaSugeridaStr = ymd(ultimoDiaMes);
+  var conceptoMes = 'Honorarios / Declaración ' + MESES[mNum-1] + ' ' + y;
+  var yaExiste = existeCobro(cid, conceptoMes);
 
   openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
   (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(function(o){ return '<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(function(o){ return '<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0">'+
   '<div style="display:flex;justify-content:space-between;align-items:center">'+
-    (c.cobra !== false ? '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>' : '<span></span>')+
+    (c.cobra !== false ? 
+      (yaExiste ? 
+        '<span class="chip ok">✓ Cuenta de este mes ya generada</span>' : 
+        '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>'
+      ) : '<span></span>')+
     '<button class="btn" data-a="close">Listo</button>'+
   '</div>');
 }
@@ -1177,6 +1191,12 @@ var ACT={
   saveCobro:async function(){
     var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
     if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return;}
+    
+    if(existeCobro(clienteId, concepto)){
+      alert('⚠️ Ya existe una cuenta por cobrar registrada para este cliente con el concepto:\n"' + concepto + '"');
+      return;
+    }
+
     var id='cb_'+uid();
     await Store.put('cobros',id,{id:id,clienteId:clienteId,concepto:concepto,monto:monto,fechaEmision:fechaEmision||todayStr(),abonos:[]});
     closeModal(); toast('Cuenta por cobrar registrada');
@@ -1239,6 +1259,12 @@ var ACT={
     closeModal();
     toast('Cobro múltiple procesado exitosamente');
     imprimirReciboMultiple(reciboId);
+  },
+  eliminarCobroIndividual:async function(d){
+    if(confirm('¿Deseas eliminar esta cuenta por cobrar?')){
+      await Store.del('cobros', d.id);
+      toast('Cuenta por cobrar eliminada');
+    }
   },
   borrarTodasCuentas:async function(){
     if(confirm('¿Estás seguro de que deseas eliminar TODAS las cuentas por cobrar y recibos generados?')){
