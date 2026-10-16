@@ -90,15 +90,6 @@ td.r,th.r{text-align:right}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
-.receipt{background:#fff;color:#111;border:1px solid #ccd;border-radius:8px;padding:22px;font-family:Georgia,"Times New Roman",serif}
-.receipt h3{margin:0;font-size:20px;letter-spacing:1px}
-.receipt .rh{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:14px}
-.receipt .big{font-size:22px;font-weight:700}
-.receipt table{min-width:0;width:100%}
-.receipt td,.receipt th{border-color:#ccc;color:#111;padding:6px 4px;font-size:14px}
-.receipt th{color:#555}
-.receipt .sig{display:flex;gap:30px;margin-top:46px}
-.receipt .sig div{flex:1;border-top:1px solid #111;text-align:center;font-size:12px;padding-top:4px}
 .lnk{color:var(--pri);cursor:pointer;background:none;border:0;padding:0;font:inherit;font-weight:600}
 table.ym th,table.ym td{padding:5px 4px;text-align:center}
 table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:190px;max-width:230px}
@@ -107,11 +98,6 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .cl.part{background:var(--warn-soft);color:var(--warn)}.cl.pend{background:var(--line);color:var(--mut)}
 .cl.na{background:none;color:var(--line);cursor:default}
 @media (max-width:600px){.fgrid{grid-template-columns:1fr}.kpi .n{font-size:22px}}
-@media print{
-  body *{visibility:hidden}
-  .receipt,.receipt *{visibility:visible}
-  .receipt{position:absolute;left:0;top:0;width:100%;border:0}
-}
 </style>
 
 <!-- Conexión Firebase -->
@@ -144,7 +130,6 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
   <header class="top">
     <h1>📒 Bitácora de clientes y cobros</h1>
     <span class="sub" id="stat"></span>
-    <button class="btn sm" id="lockbtn" data-a="lockApp" style="display:none">🔒 Bloquear</button>
   </header>
   <nav class="tabs" id="tabs"></nav>
   <main id="main"><div class="empty">Cargando…</div></main>
@@ -154,23 +139,22 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 <script>
 /* ============ CONSTANTES FISCALES ============ */
-const SEED = []; 
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 const OBL=[
   {k:'F103_104',n:'F103 + F104',f:'P'},
   {k:'F104_SEM',n:'F104 semestral',f:'S'},
   {k:'ATS',n:'ATS',f:'P'},
-  {k:'RDEP',n:'RDEP',f:'A'},
-  {k:'AGP',n:'AGP',f:'A'},
-  {k:'APS',n:'APS',f:'A'},
-  {k:'IM_RTA',n:'Imp. Renta',f:'A'},
-  {k:'SUPERCIAS',n:'Supercias',f:'A'},
-  {k:'ADI',n:'ADI',f:'A'},
-  {k:'D_PATRIM',n:'D. Patrimonial',f:'A'},
-  {k:'PM',n:'Patente Municipal',f:'A'},
-  {k:'S14',n:'14.º sueldo',f:'A'},
-  {k:'S13',n:'13.er sueldo',f:'A'}
+  {k:'RDEP',n:'RDEP',f:'A',m:1},
+  {k:'AGP',n:'AGP',f:'A',m:2},
+  {k:'APS',n:'APS',f:'A',m:2},
+  {k:'IM_RTA',n:'Imp. Renta',f:'A',m:3},
+  {k:'SUPERCIAS',n:'Supercias',f:'A',m:4},
+  {k:'ADI',n:'ADI',f:'A',m:5},
+  {k:'D_PATRIM',n:'D. Patrimonial',f:'A',m:5},
+  {k:'PM',n:'Patente Municipal',f:'A',m:6},
+  {k:'S14',n:'14.º sueldo',f:'A',m:8},
+  {k:'S13',n:'13.er sueldo',f:'A',m:12}
 ];
 
 const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
@@ -206,7 +190,6 @@ function plabel(k){
   return 'Año '+k;
 }
 function monthKey(y,m){return y+'-'+pad(m)}
-function semOfMonth(y,m){return y+'-S'+(m<=6?1:2)}
 function periodOptions(t){
   const y=now.getFullYear(),m=now.getMonth()+1,out=[];
   if(t==='M'){for(let i=-1;i<47;i++){let mm=m-i,yy=y;while(mm<1){mm+=12;yy--}out.push(monthKey(yy,mm))}}
@@ -222,7 +205,6 @@ function defaultPeriod(t){
 }
 function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
 
-/* ---- REGLETERO FISCAL EXACTO ---- */
 function dueDate(c, k, oblKey) {
   const digito = digito9(c.ruc);
   const dia = DIA_POR_DIGITO[digito] || 28;
@@ -232,31 +214,35 @@ function dueDate(c, k, oblKey) {
     const [y, m] = k.split('-').map(Number);
     return new Date(y, m, dia);
   }
-
   if (t === 'S') {
     const [y, s] = k.split('-S');
     return s === '1' ? new Date(+y, 6, dia) : new Date(+y + 1, 0, dia);
   }
-
   if (t === 'A') {
     const y = +k;
     let mes = 2;
-    let diaEspecifico = dia;
+    let diaEsp = dia;
 
     switch (oblKey) {
-      case 'RDEP': mes = 0; break; // Ene
-      case 'AGP': case 'APS': mes = 1; break; // Feb
-      case 'IM_RTA': mes = c.tipo === 'SOCIEDAD' ? 3 : 2; break; // Abr / Mar
-      case 'SUPERCIAS': mes = 3; diaEspecifico = 30; break; // Abr
-      case 'ADI': case 'D_PATRIM': mes = 4; break; // May
-      case 'PM': mes = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6; break; // Jun / Jul
-      case 'S14': mes = 7; diaEspecifico = 31; break; // Ago
-      case 'S13': mes = 11; diaEspecifico = 24; break; // Dic
-      default: mes = 2;
+      case 'RDEP': mes = 0; break;
+      case 'AGP': case 'APS': mes = 1; break;
+      case 'IM_RTA': mes = c.tipo === 'SOCIEDAD' ? 3 : 2; break;
+      case 'SUPERCIAS': mes = 3; diaEsp = 30; break;
+      case 'ADI': case 'D_PATRIM': mes = 4; break;
+      case 'PM': mes = (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 5 : 6; break;
+      case 'S14': mes = 7; diaEsp = 31; break;
+      case 'S13': mes = 11; diaEsp = 24; break;
     }
-    return new Date(y + 1, mes, diaEspecifico);
+    return new Date(y + 1, mes, diaEsp);
   }
   return new Date();
+}
+
+function oblMonthIndex(c, oblKey) {
+  if (oblKey === 'IM_RTA') return c.tipo === 'SOCIEDAD' ? 4 : 3;
+  if (oblKey === 'PM') return (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 6 : 7;
+  const target = OBL.find(o => o.k === oblKey);
+  return target && target.m ? target.m : 3;
 }
 
 function daysTo(d){return Math.round((d-midnight())/864e5)}
@@ -350,7 +336,7 @@ const Store={
   }
 };
 
-/* ============ INTERFAZ Y NAVEGACIÓN ============ */
+/* ============ INTERFAZ Y VISTAS COMPLETAS ============ */
 const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros'],['clientes','Clientes'],['grupos','Grupos y referidos'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
@@ -368,12 +354,16 @@ function vPanel(){
   const porCobrar=cs.reduce((s,r)=>s+r.saldo,0);
   const mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
   const cobMes=cs.reduce((s,r)=>s+(r.x.abonos||[]).filter(a=>(a.f||'').startsWith(mesStr)).reduce((t,a)=>t+(+a.m||0),0),0);
+  const urg=rows.filter(r=>!r.complete).slice(0,10);
   return `
   <div class="grid kpis">
     <div class="card kpi ${venc?'bad':'ok'}"><div class="n">${venc}</div><div class="l">Declaraciones vencidas · ${plabel(k)}</div></div>
     <div class="card kpi"><div class="n">${comp}/${rows.length}</div><div class="l">Clientes completos</div></div>
     <div class="card kpi ${porCobrar?'warn':'ok'}"><div class="n">${money(porCobrar)}</div><div class="l">Por cobrar</div></div>
     <div class="card kpi ok"><div class="n">${money(cobMes)}</div><div class="l">Cobrado este mes</div></div>
+  </div>
+  <div class="card"><b>Pendientes próximos · ${plabel(k)}</b>
+    ${urg.length?`<div class="tablewrap"><table><tbody>${urg.map(r=>`<tr><td><div class="nm">${esc(r.c.nombre)}</div></td><td>${dueChip(r)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Todo al día 🎉</div>'}
   </div>`;
 }
 
@@ -385,6 +375,7 @@ function vControl(){
   <div class="bar">
     <div class="seg">${['M','S','A'].map(x=>`<button class="${t===x?'on':''}" data-a="ctype" data-k="${x}">${TIPOLBL[x]}</button>`).join('')}</div>
     <select data-f="cper">${opts.map(o=>`<option value="${o}" ${o===k?'selected':''}>${plabel(o)}</option>`).join('')}</select>
+    ${grpSelect()}
   </div>
   <div class="card">
     ${rows.length?`<div class="tablewrap"><table>
@@ -393,7 +384,7 @@ function vControl(){
         <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.c.ruc)}</div></td>
         <td>${dueChip(r)}</td>
         <td><div class="obs">${r.items.map(o=>`<button class="ob ${r.av.done&&r.av.done[o.k]?'done':''}" data-a="toggle" data-c="${r.c.id}" data-k="${k}" data-o="${o.k}">${o.n}</button>`).join('')}</div></td>
-      </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Sin registros.</div>'}
+      </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Sin obligaciones en este período.</div>'}
   </div>`;
 }
 
@@ -403,23 +394,188 @@ function dueChip(r){
   return `<span class="chip ${r.dd<=7?'warn':'info'}">Vence en ${r.dd} d · ${fmtD(r.due)}</span>`;
 }
 
-function vAnual(){
-  return `<div class="card"><b>Resumen Anual</b><p class="sm">Matriz cargada correctamente.</p></div>`;
-}
-function vCobros(){return `<div class="card"><b>Módulo de Cobros</b></div>`;}
-function vClientes(){return `<div class="card"><b>Lista de Clientes</b></div>`;}
-function vGrupos(){return `<div class="card"><b>Grupos de Empresas</b></div>`;}
-function vClaves(){return `<div class="card"><b>Bóveda Cifrada</b></div>`;}
-function vAjustes(){return `<div class="card"><b>Ajustes y Respaldos</b></div>`;}
+/* ---- RESUMEN ANUAL CON MATRIZ MES A MES ---- */
+function cellInfoAnual(c, y, mNum) {
+  const mKey = monthKey(y, mNum);
+  if (!aplica(c, mKey)) return { s: 'na' };
 
+  const mItems = oblFor(c, 'M');
+  const mAv = avanceOf(c.id, mKey);
+
+  const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
+  const aAv = avanceOf(c.id, String(y));
+
+  let totalItems = mItems.length + aItemsInMonth.length;
+  if (totalItems === 0) return { s: 'na' };
+
+  let doneCount = 0, hasOverdue = false, minDays = 999;
+
+  mItems.forEach(o => {
+    if (mAv.done && mAv.done[o.k]) doneCount++;
+    else {
+      const dd = daysTo(dueDate(c, mKey, o.k));
+      if (dd < 0) hasOverdue = true;
+      if (dd < minDays) minDays = dd;
+    }
+  });
+
+  aItemsInMonth.forEach(o => {
+    if (aAv.done && aAv.done[o.k]) doneCount++;
+    else {
+      const dd = daysTo(dueDate(c, String(y), o.k));
+      if (dd < 0) hasOverdue = true;
+      if (dd < minDays) minDays = dd;
+    }
+  });
+
+  let status = 'pend';
+  if (doneCount === totalItems) status = 'ok';
+  else if (hasOverdue) status = 'bad';
+  else if (doneCount > 0) status = 'part';
+
+  return { s: status, done: doneCount, total: totalItems, dd: minDays };
+}
+
+function vAnual(){
+  const y=UI.ay;
+  let rows=activos().filter(inGrp).map(c=>{
+    const cells=[];
+    for(let m=1;m<=12;m++) cells.push(cellInfoAnual(c,y,m));
+    const act=cells.filter(x=>x.s!=='na');
+    return {c,cells,tot:act.length,ok:act.filter(x=>x.s==='ok').length,bad:act.filter(x=>x.s==='bad').length,pend:act.filter(x=>x.s!=='ok'&&x.s!=='na').length};
+  }).filter(r=>r.tot>0);
+
+  return `
+  <div class="bar">
+    <button class="btn" data-a="ayShift" data-dir="-1">◀</button>
+    <b>Año ${y}</b>
+    <button class="btn" data-a="ayShift" data-dir="1">▶</button>
+    ${grpSelect()}
+  </div>
+  <div class="card">
+    <div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">vencido</span> · <span class="cl pend">·</span> pendiente.</div>
+    ${rows.length?`<div class="tablewrap"><table class="ym" style="min-width:1000px">
+      <thead><tr><th>Cliente</th>${MESES.map(m=>`<th>${m.slice(0,3)}</th>`).join('')}<th>Estado</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><div class="nm">${esc(r.c.nombre)}</div></td>
+        ${r.cells.map((x,idx)=>{
+          if(x.s==='na')return '<td><span class="cl na">–</span></td>';
+          const txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
+          return `<td><button class="cl ${x.s==='part'?'pend':x.s}" data-a="anCellDist" data-c="${r.c.id}" data-y="${y}" data-m="${idx+1}">${txt}</button></td>`}).join('')}
+        <td><b>${r.pend?r.pend+' pend.':'✓'}</b></td></tr>`).join('')}
+      </tbody></table></div>`:'<div class="empty">Sin datos para el año.</div>'}
+  </div>`;
+}
+
+function vCobros(){
+  let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
+  return `
+  <div class="bar"><button class="btn pri" data-a="nuevoCobro">+ Nuevo cobro</button></div>
+  <div class="card">
+  ${L.length?`<div class="tablewrap"><table>
+    <thead><tr><th>Emisión</th><th>Cliente / Concepto</th><th>Monto</th><th>Saldo</th><th>Estado</th></tr></thead>
+    <tbody>${L.map(r=>`<tr>
+      <td>${fmtDate(r.x.fechaEmision)}</td>
+      <td><div class="nm">${esc(r.c.nombre)}</div><div class="sm">${esc(r.x.concepto||'')}</div></td>
+      <td>${money(r.x.monto)}</td><td><b>${money(r.saldo)}</b></td><td>${estChip(r.est)}</td>
+    </tr>`).join('')}</tbody></table></div>`:'<div class="empty">No hay cobros registrados.</div>'}
+  </div>`;
+}
+
+function vClientes(){
+  let L=clientesList();
+  return `
+  <div class="bar"><button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button></div>
+  <div class="card">
+  ${L.length?`<div class="tablewrap"><table>
+    <thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Periodicidad</th><th>Acciones</th></tr></thead>
+    <tbody>${L.map(c=>`<tr>
+      <td><div class="nm">${esc(c.nombre)}</div>${tagsCli(c)}</td>
+      <td>${esc(c.ruc)}</td><td>${esc(c.tipo)}</td><td>${esc(c.periodicidad)}</td>
+      <td><button class="btn sm" data-a="editCliente" data-id="${c.id}">Editar</button></td>
+    </tr>`).join('')}</tbody></table></div>`:'<div class="empty">Aún no hay clientes.</div>'}
+  </div>`;
+}
+
+function vGrupos(){
+  const L=activos();
+  const grp={};
+  L.forEach(c=>{ if(c.grupo) (grp[c.grupo]=grp[c.grupo]||[]).push(c); });
+  return `
+  <div class="card"><b>🏢 Grupos de empresas registrados</b>
+    ${Object.keys(grp).length?Object.entries(grp).map(([g,clis])=>`<div style="margin-top:10px">
+      <b>${esc(g)}</b> (${clis.length} empresas)${clis.map(c=>`<div class="sm">• ${esc(c.nombre)}</div>`).join('')}
+    </div>`).join(''):'<div class="empty">No has asignado grupos a tus clientes.</div>'}
+  </div>`;
+}
+
+function vClaves(){return `<div class="card"><b>🔒 Bóveda de Claves</b><p class="sm">Tus credenciales SRI y sistemas protegidos.</p></div>`;}
+
+function vAjustes(){
+  return `
+  <div class="card" style="max-width:600px">
+    <b>Configuración y Respaldos</b>
+    <p class="sm">Guarda tus datos o restáuralos en cualquier momento.</p>
+    <button class="btn" data-a="respaldo">Descargar respaldo JSON</button>
+  </div>`;
+}
+
+/* ============ MODALES ============ */
+function openModal(html,wide){
+  $('#modal').innerHTML=`<div class="bg" data-a="bgclose"><div class="box ${wide?'wide':''}">${html}</div></div>`;
+}
+function closeModal(){$('#modal').innerHTML=''}
+const val=id=>{const e=document.getElementById(id);return e?e.value:''};
+const chk=id=>{const e=document.getElementById(id);return !!(e&&e.checked)};
+
+function modalCliente(id){
+  const c=id?S.clientes[id]:{nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',periodicidad:'MENSUAL',contabilidad:false,cobra:true,tarifa:0,cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',obl:{},activo:true};
+  openModal(`<h2>${id?'Editar cliente':'Nuevo cliente'}</h2>
+  <div class="fgrid">
+    <div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="${esc(c.nombre)}"></label></div>
+    <div><label>RUC<input id="m_ruc" value="${esc(c.ruc)}"></label></div>
+    <div><label>Tipo<select id="m_tipo"><option value="PERSONA NATURAL" ${c.tipo==='PERSONA NATURAL'?'selected':''}>Persona Natural</option><option value="SOCIEDAD" ${c.tipo==='SOCIEDAD'?'selected':''}>Sociedad</option></select></label></div>
+    <div><label>Periodicidad<select id="m_per"><option value="MENSUAL" ${c.periodicidad==='MENSUAL'?'selected':''}>Mensual</option><option value="SEMESTRAL" ${c.periodicidad==='SEMESTRAL'?'selected':''}>Semestral</option></select></label></div>
+    <div><label>Grupo de Empresa<input id="m_grupo" value="${esc(c.grupo)}"></label></div>
+  </div>
+  <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="${id||''}">Guardar</button></div>`);
+}
+
+function modalAnDist(cid, y, mNum){
+  const c = S.clientes[cid];
+  const mKey = monthKey(y, mNum);
+  const mItems = oblFor(c, 'M');
+  const mAv = avanceOf(cid, mKey);
+  const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
+  const aAv = avanceOf(cid, String(y));
+
+  openModal(`<h2>${esc(c.nombre)} · ${MESES[mNum-1]} ${y}</h2>
+  ${mItems.length?`<b>Mensuales (${mKey}):</b><div class="obs" style="margin:6px 0 12px">${mItems.map(o=>`<button class="ob ${mAv.done&&mAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${mKey}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
+  ${aItemsInMonth.length?`<b>Anuales (${y}):</b><div class="obs" style="margin:6px 0 12px">${aItemsInMonth.map(o=>`<button class="ob ${aAv.done&&aAv.done[o.k]?'done':''}" data-a="toggle" data-c="${cid}" data-k="${y}" data-o="${o.k}">${o.n}</button>`).join('')}</div>`:''}
+  <div class="actions"><button class="btn pri" data-a="close">Listo</button></div>`);
+}
+
+/* ============ MANEJO DE EVENTOS ============ */
 const ACT={
   tab:d=>{UI.tab=d.k;render()},
   ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
+  ayShift:d=>{UI.ay+=+d.dir;render()},
   toggle:d=>{
     const id=d.c+'__'+d.k,av=clean(avanceOf(d.c,d.k));av.clienteId=d.c;av.periodo=d.k;av.done=av.done||{};
     if(av.done[d.o])delete av.done[d.o];else av.done[d.o]=true;
     Store.put('avances',id,av);
-  }
+  },
+  nuevoCliente:()=>modalCliente(null),
+  editCliente:d=>modalCliente(d.id),
+  saveCliente:d=>{
+    const nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim();
+    if(!nombre||!ruc){toast('Llena nombre y RUC');return}
+    const c={nombre,ruc,tipo:val('m_tipo'),periodicidad:val('m_per'),grupo:val('m_grupo').trim(),activo:true,cobra:true,obl:{F103_104:true,IM_RTA:true,PM:true}};
+    Store.put('clientes',d.id||('c'+ruc),c);closeModal();toast('Cliente guardado');
+  },
+  anCellDist:d=>modalAnDist(d.c, +d.y, +d.m),
+  close:()=>closeModal(),
+  bgclose:(d,e)=>{if(e.target.classList.contains('bg'))closeModal()}
 };
 
 document.addEventListener('click',e=>{
@@ -429,6 +585,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
   if(f==='cper'){UI.cper=t.value;render()}
+  else if(f==='fgr'){UI.fgr=t.value;render()}
 });
 
 UI.cper=defaultPeriod('M');
