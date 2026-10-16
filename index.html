@@ -96,11 +96,19 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .ob-item input{margin:0}
 .sec-title{font-size:13px;font-weight:700;color:var(--pri);margin-top:8px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
 
+/* Ocultar contenedor de impresión en pantalla normal */
 #print-area { display: none; }
+
+/* Estilos limpios y aislados para impresión */
 @media print {
   body * { visibility: hidden; }
-  #print-area, #print-area * { visibility: visible; display: block !important; }
-  #print-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; padding: 20px; font-family: sans-serif; }
+  #print-area, #print-area * { visibility: visible !important; display: block; }
+  #print-area {
+    position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; padding: 20px; font-family: Arial, sans-serif !important;
+  }
+  #print-area table { width: 100% !important; min-width: 0 !important; border-collapse: collapse !important; margin-bottom: 20px !important; }
+  #print-area th, #print-area td { border: 1px solid #000 !important; padding: 6px 8px !important; font-size: 13px !important; color: #000 !important; text-transform: none !important; }
+  #print-area th { background-color: #f2f2f2 !important; font-weight: bold !important; }
 }
 @media (max-width:600px){.fgrid{grid-template-columns:1fr}.kpi .n{font-size:22px}}
 </style>
@@ -173,7 +181,7 @@ var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 var GATE={logged:false};
 function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
 
-var S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
+var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
 var loaded={};
 var now=new Date();
 var UI={
@@ -324,6 +332,7 @@ function searchInput(fieldKey, valStr){
 
 function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
 function cobrosList(){ return Object.entries(S.cobros||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
+function recibosList(){ return Object.entries(S.recibos||{}).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
 
 /* Filtro estricto por tipo de obligación */
 function oblFor(c, t){
@@ -339,15 +348,16 @@ function oblFor(c, t){
 
 function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 
+/* Corrección: Retorna las obligaciones del cliente para el período sin bloquear por "desde" */
 function rowsFor(t,k){
   return activos().map(function(c){
-    var items=oblFor(c,t);
+    var items = oblFor(c, t);
     if(!items.length) return null;
-    var av=avanceOf(c.id,k);
-    var done=items.filter(function(o){ return av.done && av.done[o.k]; }).length;
-    var dues=items.map(function(o){ return dueDate(c,k,o.k); });
-    var minDue=new Date(Math.min.apply(null, dues));
-    var dd=daysTo(minDue);
+    var av = avanceOf(c.id, k);
+    var done = items.filter(function(o){ return av.done && av.done[o.k]; }).length;
+    var dues = items.map(function(o){ return dueDate(c, k, o.k); });
+    var minDue = new Date(Math.min.apply(null, dues));
+    var dd = daysTo(minDue);
     return {c:c, items:items, av:av, done:done, total:items.length, due:minDue, dd:dd, complete:done===items.length, overdue:dd<0&&done<items.length};
   }).filter(Boolean);
 }
@@ -365,7 +375,7 @@ function estChip(e){
 }
 
 /* ============ BASE DE DATOS ============ */
-var COLS=['clientes','cobros','avances','config','boveda','catObl'];
+var COLS=['clientes','cobros','recibos','avances','config','boveda','catObl'];
 var Store={
   db:null,
   init: async function(){
@@ -535,7 +545,7 @@ function vControl(){
   '</div>'+
   (vencidos.length ? '<div class="card" style="border-left:4px solid var(--bad)"><b style="color:var(--bad)">🚨 Declaraciones Vencidas ('+vencidos.length+')</b>'+renderTable(vencidos)+'</div>' : '')+
   '<div class="card" style="border-left:4px solid var(--pri)"><b style="color:var(--pri)">⏳ Próximas a Vencer / En Plazo ('+porVencer.length+')</b>'+
-    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes pendientes en plazo.</div>')+
+    (porVencer.length ? renderTable(porVencer) : '<div class="empty">No hay obligaciones pendientes en plazo.</div>')+
   '</div>'+
   (completados.length ? '<div class="card" style="border-left:4px solid var(--ok)"><b style="color:var(--ok)">✓ Declaraciones Completadas ('+completados.length+')</b>'+renderTable(completados)+'</div>' : '');
 }
@@ -695,6 +705,7 @@ function vCobros(){
   });
 
   var clientesArray = Object.values(porCliente);
+  var recsList = recibosList();
 
   return '<div class="bar">'+
     '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button> '+
@@ -710,7 +721,7 @@ function vCobros(){
           '</div>'+
           '<div>'+
             '<span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> '+
-            (group.totalSaldo>0 ? '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Registrar Cobro / Múltiple</button>' : '')+
+            (group.totalSaldo>0 ? '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Cobro Múltiple de Cuentas</button>' : '')+
           '</div>'+
         '</div>'+
         '<div class="tablewrap"><table style="font-size:13px">'+
@@ -724,15 +735,34 @@ function vCobros(){
               '<td><b style="color:'+(item.calc.saldo>0?'var(--bad)':'var(--ok)')+'">'+money(item.calc.saldo)+'</b></td>'+
               '<td>'+estChip(item.calc.est)+'</td>'+
               '<td>'+
-                (item.calc.saldo>0 ? '<button class="btn sm" data-a="abonarCobro" data-id="'+item.x.id+'">+ Abono</button> ' : '')+
-                '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+item.x.id+'">🖨️ Recibo</button>'+
+                (item.calc.saldo>0 ? '<button class="btn sm" data-a="abonarCobro" data-id="'+item.x.id+'">+ Abono / Pago</button> ' : '')+
+                (item.x.reciboId ? '<button class="btn sm pri" data-a="imprimirReciboMult" data-rid="'+item.x.reciboId+'">🖨️ Recibo</button>' : '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+item.x.id+'">🖨️ Recibo</button>')+
               '</td>'+
             '</tr>';
           }).join('')+'</tbody>'+
         '</table></div>'+
       '</div>';
     }).join('') : '<div class="empty">No hay cuentas por cobrar registradas.</div>')+
-  '</div>';
+  '</div>'+
+  
+  (recsList.length ? '<div class="card" style="margin-top:14px">'+
+    '<b>📑 Historial de Recibos y Comprobantes Generados</b>'+
+    '<div class="tablewrap"><table style="margin-top:8px;font-size:13px">'+
+      '<thead><tr><th>N.° Recibo</th><th>Fecha Cobro</th><th>Cliente</th><th>Método de Pago</th><th>Referencia / Banco</th><th>Monto Total</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+recsList.map(function(r){
+        var c = S.clientes[r.clienteId] || {nombre:'Cliente General'};
+        return '<tr>'+
+          '<td><b>N.° '+r.id.slice(-6).toUpperCase()+'</b></td>'+
+          '<td>'+fmtDate(r.fecha)+'</td>'+
+          '<td>'+esc(c.nombre)+'</td>'+
+          '<td><span class="chip info">'+esc(r.metodoPago||'Efectivo')+'</span></td>'+
+          '<td>'+esc(r.referencia||'N/A')+'</td>'+
+          '<td><b>'+money(r.montoTotal)+'</b></td>'+
+          '<td><button class="btn sm pri" data-a="imprimirReciboMult" data-rid="'+r.id+'">🖨️ Imprimir Recibo</button></td>'+
+        '</tr>';
+      }).join('')+'</tbody>'+
+    '</table></div>'+
+  '</div>' : '');
 }
 
 function vClientes(){
@@ -925,11 +955,18 @@ function modalAbono(id){
   var c = S.clientes[x.clienteId]||{nombre:'Cliente'};
   var calc = cobroCalc(x);
 
-  openModal('<h2>Registrar Abono / Cobro</h2>'+
+  openModal('<h2>Registrar Abono / Pago Individual</h2>'+
   '<p><b>Cliente:</b> '+esc(c.nombre)+'<br><b>Concepto:</b> '+esc(x.concepto)+'<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">'+money(calc.saldo)+'</span></p>'+
   '<div class="fgrid">'+
     '<div><label>Monto Cobrado ($)<input id="ma_monto" type="number" step="0.01" value="'+calc.saldo+'"></label></div>'+
-    '<div><label>Fecha de Cobro<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Fecha del Pago<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Forma / Método de Pago<select id="ma_metodo">'+
+      '<option value="Transferencia">Transferencia bancaria</option>'+
+      '<option value="Efectivo">Efectivo</option>'+
+      '<option value="Cheque">Cheque</option>'+
+      '<option value="Deposito">Depósito bancario</option>'+
+    '</select></label></div>'+
+    '<div><label>N.° Comprobante / Ref. / Banco<input id="ma_ref" placeholder="Ej: Trx 12345 / Pichincha"></label></div>'+
   '</div>'+
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Guardar Pago</button></div>');
 }
@@ -940,14 +977,14 @@ function modalCobroMultiple(cid){
 
   if(!pends.length){ toast('No hay cuentas pendientes para este cliente'); return; }
 
-  openModal('<h2>Cobro Múltiple / Acumulado · '+esc(c.nombre)+'</h2>'+
-  '<p class="sm">Selecciona las cuentas por cobrar a saldar con este pago:</p>'+
+  openModal('<h2>Cobro Múltiple de Cuentas · '+esc(c.nombre)+'</h2>'+
+  '<p class="sm">Selecciona las cuentas por cobrar que incluye este pago:</p>'+
   '<div class="tablewrap"><table style="font-size:13px">'+
-    '<thead><tr><th>Sel.</th><th>Fecha</th><th>Concepto</th><th>Saldo</th></tr></thead>'+
+    '<thead><tr><th>Sel.</th><th>Emisión</th><th>Concepto</th><th>Saldo Pendiente</th></tr></thead>'+
     '<tbody>'+pends.map(function(item){
       var calc = cobroCalc(item);
       return '<tr>'+
-        '<td><input type="checkbox" class="chk-cobro-mult" data-id="'+item.id+'" data-saldo="'+calc.saldo+'" checked onchange="ACT.calcMultTotal()"></td>'+
+        '<td><input type="checkbox" class="chk-cobro-mult" data-id="'+item.id+'" data-saldo="'+calc.saldo+'" data-concepto="'+esc(item.concepto)+'" checked onchange="ACT.calcMultTotal()"></td>'+
         '<td>'+fmtDate(item.fechaEmision)+'</td>'+
         '<td>'+esc(item.concepto)+'</td>'+
         '<td><b>'+money(calc.saldo)+'</b></td>'+
@@ -957,8 +994,15 @@ function modalCobroMultiple(cid){
   '<div class="fgrid" style="margin-top:12px">'+
     '<div><label>Monto Total Recibido ($)<input id="mm_total" type="number" step="0.01" readonly></label></div>'+
     '<div><label>Fecha de Cobro<input id="mm_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Forma / Método de Pago<select id="mm_metodo">'+
+      '<option value="Transferencia">Transferencia bancaria</option>'+
+      '<option value="Efectivo">Efectivo</option>'+
+      '<option value="Cheque">Cheque</option>'+
+      '<option value="Deposito">Depósito bancario</option>'+
+    '</select></label></div>'+
+    '<div><label>N.° Comprobante / Ref. / Banco<input id="mm_ref" placeholder="Ej: Trx 98765 / Banco Guayaquil"></label></div>'+
   '</div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobroMultiple" data-cid="'+cid+'">Procesar Cobros Seleccionados</button></div>');
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobroMultiple" data-cid="'+cid+'">Procesar Pago Múltiple y Generar Recibo</button></div>');
 
   ACT.calcMultTotal();
 }
@@ -990,44 +1034,96 @@ function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return;
   var c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
   var calc = cobroCalc(x);
-  var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1].f : x.fechaEmision;
+  var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
 
-  var html = '<div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">'+
+  var html = '<div style="border:2px solid #000;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
-          '<h2 style="margin:0;font-size:22px">COMPROBANTE / RECIBO DE COBRO</h2>'+
-          '<div style="font-size:13px;color:#555">Servicios Contables y Tributarios</div>'+
+          '<h2 style="margin:0;font-size:20px;color:#000">COMPROBANTE DE COBRO</h2>'+
+          '<div style="font-size:12px;color:#333">Servicios Contables y Tributarios</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:14px;font-weight:bold">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
-          '<div style="font-size:13px">Fecha: '+fmtDate(ultAbono)+'</div>'+
+          '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
+          '<div style="font-size:12px;color:#000">Fecha: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div>'+
         '</div>'+
       '</div>'+
-      '<table style="width:100%;margin-bottom:15px;font-size:14px;border:none">'+
-        '<tr><td><strong>RECIBIDO DE:</strong> '+esc(c.nombre)+'</td><td><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
-        '<tr><td colspan="2" style="padding-top:8px"><strong>CONCEPTO:</strong> '+esc(x.concepto)+'</td></tr>'+
+      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
+        '<tr><td style="padding:3px 0"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+        '<tr><td style="padding:3px 0"><strong>FORMA DE PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:3px 0"><strong>N.° REF / BANCO:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr>'+
+        '<tr><td colspan="2" style="padding:5px 0 0 0"><strong>CONCEPTO:</strong> '+esc(x.concepto)+'</td></tr>'+
       '</table>'+
-      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px">'+
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
-          '<tr style="background:#eee">'+
-            '<th style="border:1px solid #000;padding:6px;text-align:left">Detalle / Período</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right">Monto Total</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right">Pagado</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right">Saldo</th>'+
+          '<tr>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Detalle / Período</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Total</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Pagado</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Saldo</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           '<tr>'+
-            '<td style="border:1px solid #000;padding:8px">'+esc(x.concepto)+'</td>'+
-            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(x.monto)+'</td>'+
-            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(calc.pagado)+'</td>'+
-            '<td style="border:1px solid #000;padding:8px;text-align:right">'+money(calc.saldo)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(x.monto)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.pagado)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.saldo)+'</td>'+
           '</tr>'+
         '</tbody>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Entregué Conforme</div>'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:5px;font-size:12px">Recibí Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
+      '</div>'+
+    '</div>';
+
+  $('#print-area').innerHTML = html;
+  window.print();
+}
+
+function imprimirReciboMultiple(rid){
+  var r = S.recibos[rid]; if(!r) return;
+  var c = S.clientes[r.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
+
+  var html = '<div style="border:2px solid #000;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
+        '<div>'+
+          '<h2 style="margin:0;font-size:20px;color:#000">COMPROBANTE DE COBRO CONSOLIDADO</h2>'+
+          '<div style="font-size:12px;color:#333">Servicios Contables y Tributarios</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div>'+
+          '<div style="font-size:12px;color:#000">Fecha: '+fmtDate(r.fecha)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
+        '<tr><td style="padding:3px 0"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+        '<tr><td style="padding:3px 0"><strong>FORMA DE PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:3px 0"><strong>N.° REF / BANCO:</strong> '+esc(r.referencia||'N/A')+'</td></tr>'+
+      '</table>'+
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
+        '<thead>'+
+          '<tr>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:center;width:35px;background:#f2f2f2">#</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Detalle / Servicios Cancelados</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Cancelado</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          r.detalles.map(function(d, idx){
+            return '<tr>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:center">'+(idx+1)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px">'+esc(d.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(d.monto)+'</td>'+
+            '</tr>';
+          }).join('')+
+          '<tr style="font-weight:bold;background:#fafafa">'+
+            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:right">TOTAL PAGADO:</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(r.montoTotal)+'</td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
 
@@ -1087,11 +1183,11 @@ var ACT={
   },
   abonarCobro:function(d){ modalAbono(d.id); },
   saveAbono:async function(d){
-    var monto = +val('ma_monto'), fec = val('ma_fec');
+    var monto = +val('ma_monto'), fec = val('ma_fec'), metodo = val('ma_metodo'), ref = val('ma_ref').trim();
     if(!monto||!fec){toast('Ingresa monto y fecha');return;}
     var x = clean(S.cobros[d.id]);
     x.abonos = x.abonos || [];
-    x.abonos.push({f:fec, m:monto});
+    x.abonos.push({f:fec, m:monto, metodo:metodo, ref:ref});
     await Store.put('cobros', d.id, x);
     closeModal(); toast('Pago registrado');
   },
@@ -1104,30 +1200,55 @@ var ACT={
     var el = $('#mm_total'); if(el) el.value = sum.toFixed(2);
   },
   saveCobroMultiple:async function(d){
-    var fec = val('mm_fec');
+    var fec = val('mm_fec'), metodo = val('mm_metodo'), ref = val('mm_ref').trim();
     if(!fec){ toast('Ingresa la fecha de cobro'); return; }
 
     var selectedChecks = document.querySelectorAll('.chk-cobro-mult:checked');
     if(!selectedChecks.length){ toast('Selecciona al menos una cuenta por cobrar'); return; }
 
+    var reciboId = 'rc_'+uid();
+    var detalles = [];
+    var totalCobrado = 0;
+
     for(var i=0; i<selectedChecks.length; i++){
       var id = selectedChecks[i].dataset.id;
       var saldo = Number(selectedChecks[i].dataset.saldo);
+      var concepto = selectedChecks[i].dataset.concepto;
+      
+      detalles.push({concepto: concepto, monto: saldo});
+      totalCobrado += saldo;
+
       var x = clean(S.cobros[id]);
       x.abonos = x.abonos || [];
-      x.abonos.push({f:fec, m:saldo});
+      x.abonos.push({f:fec, m:saldo, metodo:metodo, ref:ref, reciboId:reciboId});
+      x.reciboId = reciboId;
       await Store.put('cobros', id, x);
     }
 
-    closeModal(); toast('Cobros procesados correctamente');
+    var recibo = {
+      id: reciboId,
+      clienteId: d.cid,
+      fecha: fec,
+      metodoPago: metodo,
+      referencia: ref,
+      montoTotal: totalCobrado,
+      detalles: detalles
+    };
+    await Store.put('recibos', reciboId, recibo);
+
+    closeModal();
+    toast('Cobro múltiple procesado exitosamente');
+    imprimirReciboMultiple(reciboId);
   },
   borrarTodasCuentas:async function(){
-    if(confirm('¿Estás seguro de que deseas eliminar TODAS las cuentas por cobrar generadas?')){
+    if(confirm('¿Estás seguro de que deseas eliminar TODAS las cuentas por cobrar y recibos generados?')){
       await Store.clearCollection('cobros');
-      toast('Todas las cuentas por cobrar han sido eliminadas');
+      await Store.clearCollection('recibos');
+      toast('Cuentas por cobrar y recibos eliminados');
     }
   },
   imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
+  imprimirReciboMult:function(d){ imprimirReciboMultiple(d.rid); },
   vSetup:async function(){
     var p=val('v_pass');
     if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;}
