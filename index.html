@@ -108,21 +108,26 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
-    authDomain: "bitacora-cobros.firebaseapp.com",
-    projectId: "bitacora-cobros",
-    storageBucket: "bitacora-cobros.firebasestorage.app",
-    messagingSenderId: "465013215619",
-    appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
-  };
+  let db = null;
+  try {
+    const firebaseConfig = {
+      apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
+      authDomain: "bitacora-cobros.firebaseapp.com",
+      projectId: "bitacora-cobros",
+      storageBucket: "bitacora-cobros.firebasestorage.app",
+      messagingSenderId: "465013215619",
+      appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
+    };
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  } catch(e) {
+    console.warn("Firebase no se pudo inicializar en este entorno:", e);
+  }
 
   window.claude = {
     use: async (service) => {
-      if (service === 'db') return db;
+      if (service === 'db' && db) return db;
       return null;
     }
   };
@@ -213,7 +218,6 @@ function plabel(k){
 }
 function monthKey(y,m){return y+'-'+pad(m)}
 
-// Genera opciones desde 2026 hacia adelante únicamente
 function periodOptions(t){
   const y=now.getFullYear(),m=now.getMonth()+1,out=[];
   if(t==='M'){
@@ -301,7 +305,7 @@ function desdeOf(c){return c.desde||'2026-01'}
 
 function aplica(c,k){
   const d=desdeOf(c),t=ptype(k);
-  if(k < '2026') return false; // Bloquea datos anteriores al 2026
+  if(k < '2026') return false;
   if(t==='M')return k>=d;
   if(t==='S'){const [y,s]=k.split('-S');return y+'-'+(s==='1'?'06':'12')>=d}
   return k+'-12'>=d;
@@ -311,7 +315,6 @@ function oblFor(c,t){
   return getOblList().filter(o=>{
     if(!c.obl||c.obl[o.k]===false)return false;
     if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
-    // Asignación de frecuencia basada en la obligación
     return o.f==='P' ? true : o.f===t;
   });
 }
@@ -345,21 +348,32 @@ const Store={
   async init(){
     let db=null;
     try{if(window.claude&&window.claude.use)db=await window.claude.use('db')}catch(e){db=null}
+    
+    // Timeout de seguridad de 2.5s para no quedarse en "Cargando..."
+    setTimeout(()=>{
+      if(!S.ready){
+        S.ready=true;
+        render();
+      }
+    }, 2500);
+
     if(db){
       this.db=db;S.kind='nube';
       COLS.forEach(col=>{
         db.collection(col).onSnapshot(snap=>{
           const o={};snap.docs.forEach(d=>{o[d.id]=d.data()});
           S[col]=o;loaded[col]=true;
-          if(COLS.every(c=>loaded[c]))S.ready=true;
-          render();
-        },err=>{loaded[col]=true;if(COLS.every(c=>loaded[c]))S.ready=true;render()});
+          if(COLS.every(c=>loaded[c])){ S.ready=true; render(); }
+        },err=>{
+          loaded[col]=true;
+          if(COLS.every(c=>loaded[c])){ S.ready=true; render(); }
+        });
       });
-      setTimeout(()=>{if(!S.ready){S.ready=true;render()}},6000);
     }else{
       S.kind='local';
       try{const raw=localStorage.getItem('bitacora_v1');if(raw){const d=JSON.parse(raw);COLS.forEach(c=>{S[c]=d[c]||{}})}}catch(e){}
-      S.ready=true;render();
+      S.ready=true;
+      render();
     }
   },
   saveLocal(){try{localStorage.setItem('bitacora_v1',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]]))))}catch(e){}},
@@ -454,7 +468,6 @@ function vPanel(){
   </div>`;
 }
 
-/* VISTA CONTROL DE OBLIGACIONES CON SEPARACIÓN Y FILTRO DE PENDIENTES */
 function vControl(){
   const t=UI.ctype,k=UI.cper;
   let allRows=rowsFor(t,k).filter(r=>inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl)&&!r.complete);
@@ -624,7 +637,6 @@ function vClaves(){
   </div>`;
 }
 
-/* VISTA DE COBROS Y REGISTRO GENERAL CON HISTORIAL Y RECIBOS */
 function vCobros(){
   let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
   return `
@@ -705,7 +717,6 @@ function openModal(html,wide){
 function closeModal(){$('#modal').innerHTML=''}
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 
-/* MODAL DE CLIENTE CON TITULOS DE OBLIGACIONES ORGANIZADOS Y SIN PERIODICIDAD FISCAL */
 function modalCliente(id){
   const c = id ? S.clientes[id] : {
     nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
@@ -808,7 +819,6 @@ function modalClave(){
   <div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>`);
 }
 
-/* MODAL DE REGISTRO DE COBRO MULTI-PERÍODO Y ACUMULADO */
 function modalCobro(cid, conceptoDef, montoDef){
   const clis=activos();
   const targetCli = cid ? S.clientes[cid] : null;
@@ -838,7 +848,7 @@ function modalAbono(id){
   const c = S.clientes[x.clienteId]||{nombre:'Cliente'};
   const calc = cobroCalc(x);
 
-  openModal(`<h2>Abonar a Cobro Pending</h2>
+  openModal(`<h2>Abonar a Cobro Pendiente</h2>
   <p><b>Cliente:</b> ${esc(c.nombre)}<br><b>Concepto:</b> ${esc(x.concepto)}<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">${money(calc.saldo)}</span></p>
   <div class="fgrid">
     <div><label>Monto del Abono ($)<input id="ma_monto" type="number" step="0.01" value="${calc.saldo}"></label></div>
@@ -865,7 +875,6 @@ function modalAnDist(cid, y, mNum){
   </div>`);
 }
 
-/* IMPRESIÓN DE RECIBO */
 function imprimirReciboCobro(id){
   const x = S.cobros[id]; if(!x) return;
   const c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
