@@ -121,7 +121,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
   } catch(e) {
-    console.warn("Firebase no conectado:", e);
+    console.warn("Firebase no disponible:", e);
   }
 
   window.claude = {
@@ -147,9 +147,9 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <div id="print-area"></div>
 
 <script>
-const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
-const DEFAULT_OBL=[
+var DEFAULT_OBL=[
   {k:'F103_104',n:'F103 + F104',f:'P',m:0,d:'RUC'},
   {k:'F104_SEM',n:'F104 semestral',f:'S',m:0,d:'RUC'},
   {k:'ATS',n:'ATS',f:'P',m:0,d:'RUC'},
@@ -165,17 +165,17 @@ const DEFAULT_OBL=[
   {k:'S13',n:'13.er sueldo',f:'A',m:12,d:24}
 ];
 
-const DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
-const PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
-const TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
+var DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
+var PERCODE={MENSUAL:'M',SEMESTRAL:'S',ANUAL:'A'};
+var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-const GATE={logged:false};
+var GATE={logged:false};
 function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
 
-const S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
-const loaded={};
-const now=new Date();
-const UI={
+var S={boveda:{},clientes:{},cobros:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
+var loaded={};
+var now=new Date();
+var UI={
   ay:new Date().getFullYear(),
   tab:'panel',
   ctype:'M',
@@ -187,77 +187,77 @@ const UI={
 };
 
 function getOblList(){
-  const custom = Object.values(S.catObl||{});
+  var custom = Object.values(S.catObl||{});
   return custom.length > 0 ? custom : DEFAULT_OBL;
 }
 
-const $=s=>document.querySelector(s);
-const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
-const pad=n=>String(n).padStart(2,'0');
-const money=n=>new Intl.NumberFormat('es-EC',{style:'currency',currency:'USD'}).format(Number(n)||0);
-const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-const todayStr=()=>ymd(new Date());
-const midnight=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const clean=o=>JSON.parse(JSON.stringify(o));
-const fmtDate=s=>{if(!s)return'';const [y,m,d]=s.split('-');return d+'/'+m+'/'+y};
-const fmtD=d=>pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();
-function toast(msg){const t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(()=>t.remove(),3200)}
+function $(s){ return document.querySelector(s); }
+function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function money(n){ return new Intl.NumberFormat('es-EC',{style:'currency',currency:'USD'}).format(Number(n)||0); }
+function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function todayStr(){ return ymd(new Date()); }
+function midnight(){ var d=new Date();d.setHours(0,0,0,0);return d; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function clean(o){ return JSON.parse(JSON.stringify(o)); }
+function fmtDate(s){ if(!s)return''; var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function fmtD(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
+function toast(msg){ var t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(function(){t.remove();},3200); }
 
-function ptype(k){return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'}
+function ptype(k){ return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'; }
 function plabel(k){
-  const t=ptype(k);
-  if(t==='M'){const [y,m]=k.split('-');return MESES[+m-1][0].toUpperCase()+MESES[+m-1].slice(1)+' '+y}
-  if(t==='S'){const [y,s]=k.split('-');return (s==='S1'?'1.er semestre ':'2.o semestre ')+y}
+  var t=ptype(k);
+  if(t==='M'){ var p=k.split('-'); return MESES[+p[1]-1][0].toUpperCase()+MESES[+p[1]-1].slice(1)+' '+p[0]; }
+  if(t==='S'){ var p2=k.split('-'); return (p2[1]==='S1'?'1.er semestre ':'2.o semestre ')+p2[0]; }
   return 'Año '+k;
 }
-function monthKey(y,m){return y+'-'+pad(m)}
+function monthKey(y,m){ return y+'-'+pad(m); }
 
 function periodOptions(t){
-  const y=now.getFullYear(),m=now.getMonth()+1,out=[];
+  var y=now.getFullYear(),m=now.getMonth()+1,out=[];
   if(t==='M'){
-    for(let yy=y; yy>=2026; yy--){
-      let maxM = (yy===y)? m+3 : 12;
-      for(let mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm));
+    for(var yy=y; yy>=2026; yy--){
+      var maxM = (yy===y)? m+3 : 12;
+      for(var mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm));
     }
   }
   if(t==='S'){
-    for(let yy=y+1; yy>=2026; yy--){ out.push(yy+'-S2'); out.push(yy+'-S1'); }
+    for(var yy2=y+1; yy2>=2026; yy2--){ out.push(yy2+'-S2'); out.push(yy2+'-S1'); }
   }
   if(t==='A'){
-    for(let yy=y+1; yy>=2026; yy--) out.push(String(yy));
+    for(var yy3=y+1; yy3>=2026; yy3--) out.push(String(yy3));
   }
   return out.length ? out : [t==='M'?'2026-01':t==='S'?'2026-S1':'2026'];
 }
 
 function defaultPeriod(t){
-  const y=now.getFullYear(),m=now.getMonth()+1;
+  var y=now.getFullYear(),m=now.getMonth()+1;
   if(y < 2026) return t==='M'?'2026-01':t==='S'?'2026-S1':'2026';
-  if(t==='M'){return m===1?monthKey(y-1,12):monthKey(y,m-1)}
-  if(t==='S'){return m>=7?y+'-S1':(y-1)+'-S2'}
+  if(t==='M'){ return m===1?monthKey(y-1,12):monthKey(y,m-1); }
+  if(t==='S'){ return m>=7?y+'-S1':(y-1)+'-S2'; }
   return String(y-1);
 }
 
-function digito9(ruc){return +String(ruc||'').replace(/\D/g,'')[8]}
+function digito9(ruc){ return +String(ruc||'').replace(/\D/g,'')[8]; }
 
 function dueDate(c, k, oblKey) {
-  const digito = digito9(c.ruc);
-  const diaRuc = DIA_POR_DIGITO[digito] || 28;
-  const t = ptype(k);
+  var digito = digito9(c.ruc);
+  var diaRuc = DIA_POR_DIGITO[digito] || 28;
+  var t = ptype(k);
 
   if (t === 'M') {
-    const [y, m] = k.split('-').map(Number);
-    return new Date(y, m, diaRuc);
+    var p = k.split('-').map(Number);
+    return new Date(p[0], p[1], diaRuc);
   }
   if (t === 'S') {
-    const [y, s] = k.split('-S');
-    return s === '1' ? new Date(+y, 6, diaRuc) : new Date(+y + 1, 0, diaRuc);
+    var p2 = k.split('-S');
+    return p2[1] === '1' ? new Date(+p2[0], 6, diaRuc) : new Date(+p2[0] + 1, 0, diaRuc);
   }
   if (t === 'A') {
-    const y = +k;
-    const target = getOblList().find(o => o.k === oblKey);
-    let mesIndex = 2;
-    let diaEspecifico = diaRuc;
+    var y = +k;
+    var target = getOblList().find(function(o){ return o.k === oblKey; });
+    var mesIndex = 2;
+    var diaEspecifico = diaRuc;
 
     if (target) {
       mesIndex = (target.m && target.m >= 1) ? target.m - 1 : 2;
@@ -274,77 +274,104 @@ function dueDate(c, k, oblKey) {
 function oblMonthIndex(c, oblKey) {
   if (oblKey === 'IM_RTA') return c.tipo === 'SOCIEDAD' ? 4 : 3;
   if (oblKey === 'PM') return (c.tipo === 'SOCIEDAD' || c.contabilidad) ? 6 : 7;
-  const target = getOblList().find(o => o.k === oblKey);
+  var target = getOblList().find(function(o){ return o.k === oblKey; });
   return target && target.m ? target.m : 3;
 }
 
-function daysTo(d){return Math.round((d-midnight())/864e5)}
+function daysTo(d){ return Math.round((d-midnight())/864e5); }
 
-const matchesQ=(c, qTerm)=>{
+function matchesQ(c, qTerm){
   if(!qTerm) return true;
-  const q=qTerm.toLowerCase().trim();
+  var q=qTerm.toLowerCase().trim();
   return (c.nombre||'').toLowerCase().includes(q)||(c.ruc||'').includes(q)||(c.grupo||'').toLowerCase().includes(q);
-};
+}
 
-const clientesList=()=>Object.entries(S.clientes).map(([id,c])=>({...c,id})).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
-const gruposList=()=>[...new Set(clientesList().map(c=>(c.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-const tagsCli=c=>(c.activo===false?'<span class="chip warn">⏸ Suspendido</span> ':'')+(c.grupo?'<span class="chip info">🏢 '+esc(c.grupo)+'</span> ':'')+(c.cobra===false?'<span class="chip mut">Gratuito</span> ':'<span class="chip ok">$'+(c.tarifa||0)+'</span> ')+(c.doc==='factura'?'<span class="chip info">Factura</span>':'<span class="chip mut">Recibo</span>');
-const inGrp=c=>UI.fgr==='todos'||(UI.fgr==='__sin'?!(c.grupo||'').trim():(c.grupo||'').trim()===UI.fgr);
-const grpSelect=()=>'<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" '+(UI.fgr==='__sin'?'selected':'')+'>Sin grupo</option>'+gruposList().map(g=>'<option value="'+esc(g)+'" '+(UI.fgr===g?'selected':'')+'>🏢 '+esc(g)+'</option>').join('')+'</select>';
+function clientesList(){
+  return Object.entries(S.clientes).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre,'es'); });
+}
 
-const searchInput=(fieldKey, valStr)=>'<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente o RUC…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">';
+function gruposList(){
+  var set = new Set(clientesList().map(function(c){ return (c.grupo||'').trim(); }).filter(Boolean));
+  return Array.from(set).sort(function(a,b){ return a.localeCompare(b,'es'); });
+}
 
-const activos=()=>clientesList().filter(c=>c.activo!==false);
-const cobrosList=()=>Object.entries(S.cobros).map(([id,c])=>({...c,id}));
-function desdeOf(c){return c.desde||'2026-01'}
+function tagsCli(c){
+  return (c.activo===false?'<span class="chip warn">⏸ Suspendido</span> ':'')+
+         (c.grupo?'<span class="chip info">🏢 '+esc(c.grupo)+'</span> ':'')+
+         (c.cobra===false?'<span class="chip mut">Gratuito</span> ':'<span class="chip ok">$'+(c.tarifa||0)+'</span> ')+
+         (c.doc==='factura'?'<span class="chip info">Factura</span>':'<span class="chip mut">Recibo</span>');
+}
+
+function inGrp(c){
+  return UI.fgr==='todos'||(UI.fgr==='__sin'?!((c.grupo||'').trim()):(c.grupo||'').trim()===UI.fgr);
+}
+
+function grpSelect(){
+  return '<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" '+(UI.fgr==='__sin'?'selected':'')+'>Sin grupo</option>'+
+         gruposList().map(function(g){ return '<option value="'+esc(g)+'" '+(UI.fgr===g?'selected':'')+'>🏢 '+esc(g)+'</option>'; }).join('')+'</select>';
+}
+
+function searchInput(fieldKey, valStr){
+  return '<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente o RUC…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">';
+}
+
+function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
+function cobrosList(){ return Object.entries(S.cobros).map(function(pair){ return Object.assign({}, pair[1], {id: pair[0]}); }); }
+function desdeOf(c){ return c.desde||'2026-01'; }
 
 function aplica(c,k){
-  const d=desdeOf(c),t=ptype(k);
+  var d=desdeOf(c),t=ptype(k);
   if(k < '2026') return false;
-  if(t==='M')return k>=d;
-  if(t==='S'){const [y,s]=k.split('-S');return y+'-'+(s==='1'?'06':'12')>=d}
+  if(t==='M') return k>=d;
+  if(t==='S'){ var p=k.split('-S'); return p[0]+'-'+(p[1]==='1'?'06':'12')>=d; }
   return k+'-12'>=d;
 }
 
 function oblFor(c,t){
-  return getOblList().filter(o=>{
+  return getOblList().filter(function(o){
     if(!c.obl||c.obl[o.k]===false)return false;
     if(o.k==='SUPERCIAS'&&c.tipo!=='SOCIEDAD')return false;
     return o.f==='P' ? true : o.f===t;
   });
 }
 
-function avanceOf(cid,k){return S.avances[cid+'__'+k]||{done:{}}}
+function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 
 function rowsFor(t,k){
   if(k < '2026') return [];
-  return activos().map(c=>{
+  return activos().map(function(c){
     if(!aplica(c,k))return null;
-    const items=oblFor(c,t);if(!items.length)return null;
-    const av=avanceOf(c.id,k),done=items.filter(o=>av.done&&av.done[o.k]).length;
-    const dues=items.map(o=>dueDate(c,k,o.k));
-    const minDue=new Date(Math.min(...dues));
-    const dd=daysTo(minDue);
-    return {c,items,av,done,total:items.length,due:minDue,dd,complete:done===items.length,overdue:dd<0&&done<items.length};
+    var items=oblFor(c,t);if(!items.length)return null;
+    var av=avanceOf(c.id,k);
+    var done=items.filter(function(o){ return av.done&&av.done[o.k]; }).length;
+    var dues=items.map(function(o){ return dueDate(c,k,o.k); });
+    var minDue=new Date(Math.min.apply(null, dues));
+    var dd=daysTo(minDue);
+    return {c:c, items:items, av:av, done:done, total:items.length, due:minDue, dd:dd, complete:done===items.length, overdue:dd<0&&done<items.length};
   }).filter(Boolean);
 }
 
 function cobroCalc(x){
-  const pagado=(x.abonos||[]).reduce((s,a)=>s+(+a.m||0),0),monto=+x.monto||0,saldo=Math.max(0,+(monto-pagado).toFixed(2));
-  let est=x.anulado?'anulado':pagado>=monto&&monto>0?'pagado':pagado>0?'parcial':'pendiente';
-  return {pagado,saldo,est};
+  var pagado=(x.abonos||[]).reduce(function(s,a){ return s+(+a.m||0); },0);
+  var monto=+x.monto||0;
+  var saldo=Math.max(0,+(monto-pagado).toFixed(2));
+  var est=x.anulado?'anulado':pagado>=monto&&monto>0?'pagado':pagado>0?'parcial':'pendiente';
+  return {pagado:pagado, saldo:saldo, est:est};
 }
-const estChip=e=>({pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]);
+
+function estChip(e){
+  return {pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e];
+}
 
 /* ============ BASE DE DATOS ============ */
-const COLS=['clientes','cobros','avances','config','boveda','catObl'];
-const Store={
+var COLS=['clientes','cobros','avances','config','boveda','catObl'];
+var Store={
   db:null,
-  async init(){
-    let db=null;
-    try{if(window.claude&&window.claude.use)db=await window.claude.use('db')}catch(e){db=null}
+  init: async function(){
+    var db=null;
+    try{ if(window.claude&&window.claude.use) db=await window.claude.use('db'); }catch(e){ db=null; }
     
-    setTimeout(()=>{
+    setTimeout(function(){
       if(!S.ready){
         S.ready=true;
         render();
@@ -352,76 +379,83 @@ const Store={
     }, 1000);
 
     if(db){
-      this.db=db;S.kind='nube';
-      COLS.forEach(col=>{
-        db.collection(col).onSnapshot(snap=>{
-          const o={};snap.docs.forEach(d=>{o[d.id]=d.data()});
-          S[col]=o;loaded[col]=true;
-          if(COLS.every(c=>loaded[c])){ S.ready=true; render(); }
-        },err=>{
+      this.db=db; S.kind='nube';
+      COLS.forEach(function(col){
+        db.collection(col).onSnapshot(function(snap){
+          var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
+          S[col]=o; loaded[col]=true;
+          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
+        }, function(err){
           loaded[col]=true;
-          if(COLS.every(c=>loaded[c])){ S.ready=true; render(); }
+          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
         });
       });
     }else{
       S.kind='local';
-      try{const raw=localStorage.getItem('bitacora_v1');if(raw){const d=JSON.parse(raw);COLS.forEach(c=>{S[c]=d[c]||{}})}}catch(e){}
+      try{
+        var raw=localStorage.getItem('bitacora_v1');
+        if(raw){ var d=JSON.parse(raw); COLS.forEach(function(c){ S[c]=d[c]||{}; }); }
+      }catch(e){}
       S.ready=true;
       render();
     }
   },
-  saveLocal(){try{localStorage.setItem('bitacora_v1',JSON.stringify(Object.fromEntries(COLS.map(c=>[c,S[c]]))))}catch(e){}},
-  async put(col,id,data){
-    data=clean(data);S[col][id]=data;render();
-    if(this.db){try{await this.db.doc(col+'/'+id).set(data)}catch(e){toast('Error al guardar')}}
+  saveLocal: function(){
+    try{
+      var obj={};
+      COLS.forEach(function(c){ obj[c]=S[c]; });
+      localStorage.setItem('bitacora_v1', JSON.stringify(obj));
+    }catch(e){}
+  },
+  put: async function(col,id,data){
+    data=clean(data); S[col][id]=data; render();
+    if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar'); } }
     else this.saveLocal();
   },
-  async del(col,id){
-    delete S[col][id];render();
-    if(this.db){try{await this.db.doc(col+'/'+id).delete()}catch(e){toast('Error al eliminar')}}
+  del: async function(col,id){
+    delete S[col][id]; render();
+    if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } }
     else this.saveLocal();
   }
 };
 
-/* ============ CIFRADO BÓVEDA Y GESTOR DE CLAVES ============ */
-const VAULT={key:null,data:[]};
-const _enc=new TextEncoder(),_dec=new TextDecoder();
-const b64=buf=>{let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s)};
-const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+/* ============ CIFRADO Y BOVEDA ============ */
+var VAULT={key:null,data:[]};
+var _enc=new TextEncoder(), _dec=new TextDecoder();
+function b64(buf){ var s=''; new Uint8Array(buf).forEach(function(b){ s+=String.fromCharCode(b); }); return btoa(s); }
+function unb64(s){ return Uint8Array.from(atob(s), function(c){ return c.charCodeAt(0); }); }
 
 async function deriveKey(pass,salt,iter){
-  const km=await crypto.subtle.importKey('raw',_enc.encode(pass),'PBKDF2',false,['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iter,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  var km=await crypto.subtle.importKey('raw',_enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt:salt,iterations:iter,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 async function encJSON(key,obj){
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,_enc.encode(JSON.stringify(obj)));
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,_enc.encode(JSON.stringify(obj)));
   return {iv:b64(iv),ct:b64(ct)};
 }
 async function decJSON(key,d){
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},key,unb64(d.ct));
+  var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},key,unb64(d.ct));
   return JSON.parse(_dec.decode(pt));
 }
 
 async function loadVaultItems(){
   if(!VAULT.key||!S.boveda.items) { VAULT.data = []; return; }
-  try {
-    VAULT.data = await decJSON(VAULT.key, S.boveda.items);
-  } catch(e) { VAULT.data = []; }
+  try { VAULT.data = await decJSON(VAULT.key, S.boveda.items); } catch(e) { VAULT.data = []; }
 }
 
 async function saveVaultItems(){
   if(!VAULT.key) return;
-  const enc = await encJSON(VAULT.key, VAULT.data);
+  var enc = await encJSON(VAULT.key, VAULT.data);
   await Store.put('boveda', 'items', enc);
 }
 
-/* ============ INTERFAZ Y VISTAS ============ */
-const TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros y Recibos'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
+/* ============ VISTAS DE NAVEGACION ============ */
+var TABS=[['panel','Panel'],['control','Control de obligaciones'],['anual','Resumen anual'],['cobros','Cobros y Recibos'],['clientes','Clientes'],['grupos','Grupos y referidos'],['catObl','📋 Catálogo de obligaciones'],['claves','🔒 Claves'],['ajustes','Ajustes']];
 
 function render(){
-  const cfgPass = gateCfg();
-  const lb=$('#lockbtn'); 
+  var cfgPass = gateCfg();
+  var lb=$('#lockbtn'); 
   if(lb) lb.style.display = cfgPass ? '' : 'none';
 
   if(cfgPass && !GATE.logged){
@@ -435,21 +469,25 @@ function render(){
     return;
   }
 
-  if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return}
+  if(!S.ready){$('#main').innerHTML='<div class="empty">Cargando…</div>';return;}
   $('#stat').textContent=S.kind==='nube'?'Guardado en la nube · datos compartidos':'Modo local';
-  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button class="'+(UI.tab===k?'on':'')+'" data-a="tab" data-k="'+k+'">'+l+'</button>').join('');
-  const v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
+  $('#tabs').innerHTML=TABS.map(function(pair){ return '<button class="'+(UI.tab===pair[0]?'on':'')+'" data-a="tab" data-k="'+pair[0]+'">'+pair[1]+'</button>'; }).join('');
+  var v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
 }
 
 function vPanel(){
-  const k=defaultPeriod('M'),rows=rowsFor('M',k);
-  const venc=rows.filter(r=>r.overdue).length,comp=rows.filter(r=>r.complete).length;
-  const cs=cobrosList().filter(x=>!x.anulado).map(x=>({x,...cobroCalc(x)}));
-  const porCobrar=cs.reduce((s,r)=>s+r.saldo,0);
-  const mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
-  const cobMes=cs.reduce((s,r)=>s+(r.x.abonos||[]).filter(a=>(a.f||'').startsWith(mesStr)).reduce((t,a)=>t+(+a.m||0),0),0);
-  const urg=rows.filter(r=>!r.complete).slice(0,10);
+  var k=defaultPeriod('M'), rows=rowsFor('M',k);
+  var venc=rows.filter(function(r){return r.overdue;}).length;
+  var comp=rows.filter(function(r){return r.complete;}).length;
+  var cs=cobrosList().filter(function(x){return !x.anulado;}).map(function(x){ return Object.assign({x:x}, cobroCalc(x)); });
+  var porCobrar=cs.reduce(function(s,r){return s+r.saldo;},0);
+  var mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
+  var cobMes=cs.reduce(function(s,r){
+    return s+(r.x.abonos||[]).filter(function(a){return (a.f||'').startsWith(mesStr);}).reduce(function(t,a){return t+(+a.m||0);},0);
+  },0);
+  var urg=rows.filter(function(r){return !r.complete;}).slice(0,10);
+
   return '<div class="grid kpis">'+
     '<div class="card kpi '+(venc?'bad':'ok')+'"><div class="n">'+venc+'</div><div class="l">Declaraciones vencidas · '+plabel(k)+'</div></div>'+
     '<div class="card kpi"><div class="n">'+comp+'/'+rows.length+'</div><div class="l">Clientes completos</div></div>'+
@@ -457,29 +495,33 @@ function vPanel(){
     '<div class="card kpi ok"><div class="n">'+money(cobMes)+'</div><div class="l">Cobrado este mes</div></div>'+
   '</div>'+
   '<div class="card"><b>Pendientes próximos · '+plabel(k)+'</b>'+
-    (urg.length?'<div class="tablewrap"><table><tbody>'+urg.map(r=>'<tr><td><div class="nm">'+esc(r.c.nombre)+'</div></td><td>'+dueChip(r)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">Todo al día 🎉</div>')+
+    (urg.length?'<div class="tablewrap"><table><tbody>'+urg.map(function(r){ return '<tr><td><div class="nm">'+esc(r.c.nombre)+'</div></td><td>'+dueChip(r)+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="empty">Todo al día 🎉</div>')+
   '</div>';
 }
 
 function vControl(){
-  const t=UI.ctype,k=UI.cper;
-  let allRows=rowsFor(t,k).filter(r=>inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl)&&!r.complete);
+  var t=UI.ctype, k=UI.cper;
+  var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl)&&!r.complete; });
   
-  const vencidos = allRows.filter(r => r.overdue);
-  const porVencer = allRows.filter(r => !r.overdue);
-  const opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
+  var vencidos = allRows.filter(function(r){ return r.overdue; });
+  var porVencer = allRows.filter(function(r){ return !r.overdue; });
+  var opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
-  const renderTable = (list) => '<div class="tablewrap"><table>'+
-    '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>'+
-    '<tbody>'+list.map(r=>'<tr>'+
-      '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
-      '<td>'+dueChip(r)+'</td>'+
-      '<td><div class="obs">'+r.items.map(o=>'<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div></td>'+
-    '</tr>').join('')+'</tbody></table></div>';
+  var renderTable = function(list){
+    return '<div class="tablewrap"><table>'+
+      '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones Pendientes</th></tr></thead>'+
+      '<tbody>'+list.map(function(r){
+        return '<tr>'+
+          '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
+          '<td>'+dueChip(r)+'</td>'+
+          '<td><div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div></td>'+
+        '</tr>';
+      }).join('')+'</tbody></table></div>';
+  };
 
   return '<div class="bar">'+
-    '<div class="seg">'+['M','S','A'].map(x=>'<button class="'+(t===x?'on':'')+'" data-a="ctype" data-k="'+x+'">'+TIPOLBL[x]+'</button>').join('')+'</div>'+
-    '<select data-f="cper">'+opts.map(o=>'<option value="'+o+'" '+(o===k?'selected':'')+'>'+plabel(o)+'</option>').join('')+'</select>'+
+    '<div class="seg">'+['M','S','A'].map(function(x){ return '<button class="'+(t===x?'on':'')+'" data-a="ctype" data-k="'+x+'">'+TIPOLBL[x]+'</button>'; }).join('')+'</div>'+
+    '<select data-f="cper">'+opts.map(function(o){ return '<option value="'+o+'" '+(o===k?'selected':'')+'>'+plabel(o)+'</option>'; }).join('')+'</select>'+
     grpSelect()+
     searchInput('q_ctrl', UI.q_ctrl)+
   '</div>'+
@@ -489,46 +531,40 @@ function vControl(){
   '</div>';
 }
 
-function dueChip(r){
-  if(r.complete)return '<span class="chip ok">Completo</span>';
-  if(r.dd<0)return '<span class="chip bad">Vencido hace '+(-r.dd)+' d · '+fmtD(r.due)+'</span>';
-  return '<span class="chip '+(r.dd<=7?'warn':'info')+'">Vence en '+r.dd+' d · '+fmtD(r.due)+'</span>';
-}
-
 function cellInfoAnual(c, y, mNum) {
-  const mKey = monthKey(y, mNum);
+  var mKey = monthKey(y, mNum);
   if (!aplica(c, mKey)) return { s: 'na' };
 
-  const mItems = oblFor(c, 'M');
-  const mAv = avanceOf(c.id, mKey);
+  var mItems = oblFor(c, 'M');
+  var mAv = avanceOf(c.id, mKey);
 
-  const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
-  const aAv = avanceOf(c.id, String(y));
+  var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
+  var aAv = avanceOf(c.id, String(y));
 
-  let totalItems = mItems.length + aItemsInMonth.length;
+  var totalItems = mItems.length + aItemsInMonth.length;
   if (totalItems === 0) return { s: 'na' };
 
-  let doneCount = 0, hasOverdue = false, minDays = 999;
+  var doneCount = 0, hasOverdue = false, minDays = 999;
 
-  mItems.forEach(o => {
+  mItems.forEach(function(o){
     if (mAv.done && mAv.done[o.k]) doneCount++;
     else {
-      const dd = daysTo(dueDate(c, mKey, o.k));
+      var dd = daysTo(dueDate(c, mKey, o.k));
       if (dd < 0) hasOverdue = true;
       if (dd < minDays) minDays = dd;
     }
   });
 
-  aItemsInMonth.forEach(o => {
+  aItemsInMonth.forEach(function(o){
     if (aAv.done && aAv.done[o.k]) doneCount++;
     else {
-      const dd = daysTo(dueDate(c, String(y), o.k));
+      var dd = daysTo(dueDate(c, String(y), o.k));
       if (dd < 0) hasOverdue = true;
       if (dd < minDays) minDays = dd;
     }
   });
 
-  let status = 'pend';
+  var status = 'pend';
   if (doneCount === totalItems) status = 'ok';
   else if (hasOverdue) status = 'bad';
   else if (doneCount > 0) status = 'part';
@@ -537,13 +573,13 @@ function cellInfoAnual(c, y, mNum) {
 }
 
 function vAnual(){
-  const y = UI.ay < 2026 ? 2026 : UI.ay;
-  let rows=activos().filter(c=>inGrp(c)&&matchesQ(c, UI.q_anual)).map(c=>{
-    const cells=[];
-    for(let m=1;m<=12;m++) cells.push(cellInfoAnual(c,y,m));
-    const act=cells.filter(x=>x.s!=='na');
-    return {c,cells,tot:act.length,ok:act.filter(x=>x.s==='ok').length,bad:act.filter(x=>x.s==='bad').length,pend:act.filter(x=>x.s!=='ok'&&x.s!=='na').length};
-  }).filter(r=>r.tot>0);
+  var y = UI.ay < 2026 ? 2026 : UI.ay;
+  var rows=activos().filter(function(c){ return inGrp(c)&&matchesQ(c, UI.q_anual); }).map(function(c){
+    var cells=[];
+    for(var m=1;m<=12;m++) cells.push(cellInfoAnual(c,y,m));
+    var act=cells.filter(function(x){ return x.s!=='na'; });
+    return {c:c, cells:cells, tot:act.length, ok:act.filter(function(x){return x.s==='ok';}).length, bad:act.filter(function(x){return x.s==='bad';}).length, pend:act.filter(function(x){return x.s!=='ok'&&x.s!=='na';}).length};
+  }).filter(function(r){ return r.tot>0; });
 
   return '<div class="bar">'+
     '<button class="btn" data-a="ayShift" data-dir="-1" '+(y<=2026?'disabled':'')+'>◀</button>'+
@@ -555,43 +591,49 @@ function vAnual(){
   '<div class="card">'+
     '<div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">vencido</span> · <span class="cl pend">·</span> pendiente.</div>'+
     (rows.length?'<div class="tablewrap"><table class="ym" style="min-width:1000px">'+
-      '<thead><tr><th>Cliente</th>'+MESES.map(m=>'<th>'+m.slice(0,3)+'</th>').join('')+'<th>Estado</th></tr></thead>'+
-      '<tbody>'+rows.map(r=>'<tr>'+
-        '<td><div class="nm">'+esc(r.c.nombre)+'</div></td>'+
-        r.cells.map((x,idx)=>{
-          if(x.s==='na')return '<td><span class="cl na">–</span></td>';
-          const txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
-          return '<td><button class="cl '+(x.s==='part'?'pend':x.s)+'" data-a="anCellDist" data-c="'+r.c.id+'" data-y="'+y+'" data-m="'+(idx+1)+'">'+txt+'</button></td>'}).join('')+
-        '<td><b>'+(r.pend?r.pend+' pend.':'✓')+'</b></td></tr>').join('')+
+      '<thead><tr><th>Cliente</th>'+MESES.map(function(m){ return '<th>'+m.slice(0,3)+'</th>'; }).join('')+'<th>Estado</th></tr></thead>'+
+      '<tbody>'+rows.map(function(r){
+        return '<tr>'+
+          '<td><div class="nm">'+esc(r.c.nombre)+'</div></td>'+
+          r.cells.map(function(x,idx){
+            if(x.s==='na')return '<td><span class="cl na">–</span></td>';
+            var txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
+            return '<td><button class="cl '+(x.s==='part'?'pend':x.s)+'" data-a="anCellDist" data-c="'+r.c.id+'" data-y="'+y+'" data-m="'+(idx+1)+'">'+txt+'</button></td>';
+          }).join('')+
+          '<td><b>'+(r.pend?r.pend+' pend.':'✓')+'</b></td>'+
+        '</tr>';
+      }).join('')+
       '</tbody></table></div>':'<div class="empty">Sin datos coincidentes para el año.</div>')+
   '</div>';
 }
 
 function vCatObl(){
-  const list = getOblList();
+  var list = getOblList();
   return '<div class="bar"><button class="btn pri" data-a="nuevaObl">+ Nueva obligación</button></div>'+
   '<div class="card">'+
     '<b>Catálogo de obligaciones fiscales</b>'+
     '<p class="sm">Configura códigos, frecuencias y meses de vencimiento. Se aplicará automáticamente a la matriz.</p>'+
     '<div class="tablewrap"><table style="min-width:700px">'+
       '<thead><tr><th>Código</th><th>Nombre</th><th>Frecuencia</th><th>Mes Vencimiento</th><th>Día Vencimiento</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+list.map(o=>'<tr>'+
-        '<td><b>'+esc(o.k)+'</b></td>'+
-        '<td>'+esc(o.n)+'</td>'+
-        '<td>'+(o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual')+'</td>'+
-        '<td>'+(o.m?MESES[o.m-1]:'—')+'</td>'+
-        '<td>'+(o.d==='RUC'?'9.º dígito RUC':o.d)+'</td>'+
-        '<td>'+
-          '<button class="btn sm" data-a="editObl" data-k="'+esc(o.k)+'">Editar</button> '+
-          '<button class="btn sm danger" data-a="delObl" data-k="'+esc(o.k)+'">Eliminar</button>'+
-        '</td>'+
-      '</tr>').join('')+'</tbody>'+
+      '<tbody>'+list.map(function(o){
+        return '<tr>'+
+          '<td><b>'+esc(o.k)+'</b></td>'+
+          '<td>'+esc(o.n)+'</td>'+
+          '<td>'+(o.f==='P'?'Mensual':o.f==='S'?'Semestral':'Anual')+'</td>'+
+          '<td>'+(o.m?MESES[o.m-1]:'—')+'</td>'+
+          '<td>'+(o.d==='RUC'?'9.º dígito RUC':o.d)+'</td>'+
+          '<td>'+
+            '<button class="btn sm" data-a="editObl" data-k="'+esc(o.k)+'">Editar</button> '+
+            '<button class="btn sm danger" data-a="delObl" data-k="'+esc(o.k)+'">Eliminar</button>'+
+          '</td>'+
+        '</tr>';
+      }).join('')+'</tbody>'+
     '</table></div>'+
   '</div>';
 }
 
 function vClaves(){
-  const meta=S.boveda.meta;
+  var meta=S.boveda.meta;
   if(!meta) return '<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b>'+
     '<p class="sm">Ingresa una clave maestra para cifrar las contraseñas de tus clientes.</p>'+
     '<div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div>'+
@@ -610,20 +652,22 @@ function vClaves(){
     '<div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>'+
     (VAULT.data.length ? '<div class="tablewrap"><table style="min-width:650px">'+
       '<thead><tr><th>Cliente</th><th>Servicio / Plataforma</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+VAULT.data.map((item, idx) => '<tr>'+
-        '<td><b>'+esc(item.cliente)+'</b></td>'+
-        '<td><span class="chip info">'+esc(item.servicio)+'</span></td>'+
-        '<td>'+esc(item.usuario)+'</td>'+
-        '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'">'+
-            ' <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
-        '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td>'+
-      '</tr>').join('')+'</tbody>'+
+      '<tbody>'+VAULT.data.map(function(item, idx){
+        return '<tr>'+
+          '<td><b>'+esc(item.cliente)+'</b></td>'+
+          '<td><span class="chip info">'+esc(item.servicio)+'</span></td>'+
+          '<td>'+esc(item.usuario)+'</td>'+
+          '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'">'+
+              ' <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
+          '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td>'+
+        '</tr>';
+      }).join('')+'</tbody>'+
     '</table></div>' : '<div class="empty">No hay claves guardadas en la bóveda. Usa "+ Nueva Credencial".</div>')+
   '</div>';
 }
 
 function vCobros(){
-  let L=cobrosList().map(x=>({x,...cobroCalc(x),c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}));
+  var L=cobrosList().map(function(x){ return Object.assign({x:x, c:S.clientes[x.clienteId]||{nombre:'(sin cliente)'}}, cobroCalc(x)); });
   return '<div class="bar">'+
     '<button class="btn pri" data-a="nuevoCobro">+ Nuevo Cobro / Acumulado</button>'+
   '</div>'+
@@ -631,8 +675,8 @@ function vCobros(){
     '<b>📜 Registro General de Cobros y Pagos Realizados</b>'+
     (L.length?'<div class="tablewrap"><table style="margin-top:10px">'+
       '<thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Conceptos / Períodos</th><th>Monto Total</th><th>Pagado</th><th>Estado</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+L.map(r=>{
-        const ultAbono = r.x.abonos && r.x.abonos.length ? r.x.abonos[r.x.abonos.length-1].f : r.x.fechaEmision;
+      '<tbody>'+L.map(function(r){
+        var ultAbono = r.x.abonos && r.x.abonos.length ? r.x.abonos[r.x.abonos.length-1].f : r.x.fechaEmision;
         return '<tr>'+
         '<td><b>'+fmtDate(ultAbono)+'</b><div class="sm">Emisión: '+fmtDate(r.x.fechaEmision)+'</div></td>'+
         '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc||'')+'</div></td>'+
@@ -644,12 +688,13 @@ function vCobros(){
           '<button class="btn sm" data-a="abonarCobro" data-id="'+r.x.id+'">+ Abono</button> '+
           '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+r.x.id+'">🖨️ Recibo</button>'+
         '</td>'+
-      '</tr>'}).join('')+'</tbody></table></div>':'<div class="empty">No hay cobros registrados.</div>')+
+      '</tr>';
+      }).join('')+'</tbody></table></div>':'<div class="empty">No hay cobros registrados.</div>')+
   '</div>';
 }
 
 function vClientes(){
-  let L=clientesList().filter(c=>matchesQ(c, UI.q_cli));
+  var L=clientesList().filter(function(c){ return matchesQ(c, UI.q_cli); });
   return '<div class="bar">'+
     '<button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button>'+
     searchInput('q_cli', UI.q_cli)+
@@ -657,24 +702,28 @@ function vClientes(){
   '<div class="card">'+
   (L.length?'<div class="tablewrap"><table>'+
     '<thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Acciones</th></tr></thead>'+
-    '<tbody>'+L.map(c=>'<tr>'+
-      '<td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td>'+
-      '<td>'+esc(c.ruc)+'</td><td>'+esc(c.tipo)+'</td>'+
-      '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b><div class="sm">'+(c.doc==='factura'?'Factura':'Recibo interno')+'</div></td>'+
-      '<td><button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button></td>'+
-    '</tr>').join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes coincidentes.</div>')+
+    '<tbody>'+L.map(function(c){
+      return '<tr>'+
+        '<td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td>'+
+        '<td>'+esc(c.ruc)+'</td><td>'+esc(c.tipo)+'</td>'+
+        '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b><div class="sm">'+(c.doc==='factura'?'Factura':'Recibo interno')+'</div></td>'+
+        '<td><button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button></td>'+
+      '</tr>';
+    }).join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes coincidentes.</div>')+
   '</div>';
 }
 
 function vGrupos(){
-  const L=activos();
-  const grp={};
-  L.forEach(c=>{ if(c.grupo) (grp[c.grupo]=grp[c.grupo]||[]).push(c); });
+  var L=activos();
+  var grp={};
+  L.forEach(function(c){ if(c.grupo) (grp[c.grupo]=grp[c.grupo]||[]).push(c); });
   return '<div class="card"><b>🏢 Grupos de empresas registrados</b>'+
-    (Object.keys(grp).length?Object.entries(grp).map(([g,clis])=>'<div style="margin-top:10px">'+
-      '<b>'+esc(g)+'</b> ('+clis.length+' empresas)'+
-      clis.map(c=>'<div class="sm">• '+esc(c.nombre)+'</div>').join('')+
-    '</div>').join(''):'<div class="empty">No has asignado grupos a tus clientes.</div>')+
+    (Object.keys(grp).length?Object.entries(grp).map(function(pair){
+      return '<div style="margin-top:10px">'+
+        '<b>'+esc(pair[0])+'</b> ('+pair[1].length+' empresas)'+
+        pair[1].map(function(c){ return '<div class="sm">• '+esc(c.nombre)+'</div>'; }).join('')+
+      '</div>';
+    }).join(''):'<div class="empty">No has asignado grupos a tus clientes.</div>')+
   '</div>';
 }
 
@@ -697,25 +746,27 @@ function openModal(html,wide){
   $('#modal').innerHTML='<div class="bg" data-a="bgclose"><div class="box '+(wide?'wide':'')+'">'+html+'</div></div>';
 }
 function closeModal(){$('#modal').innerHTML=''}
-const val=id=>{const e=document.getElementById(id);return e?e.value:''};
+function val(id){ var e=document.getElementById(id); return e?e.value:''; }
 
 function modalCliente(id){
-  const c = id ? S.clientes[id] : {
+  var c = id ? S.clientes[id] : {
     nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
     contabilidad:false,cobra:true,tarifa:0,
     cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',
     obl:{F103_104:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
   };
-  const cat = getOblList();
+  var cat = getOblList();
 
-  const mens = cat.filter(o => o.f === 'P');
-  const sem = cat.filter(o => o.f === 'S');
-  const anu = cat.filter(o => o.f === 'A');
+  var mens = cat.filter(function(o){ return o.f === 'P'; });
+  var sem = cat.filter(function(o){ return o.f === 'S'; });
+  var anu = cat.filter(function(o){ return o.f === 'A'; });
 
-  const renderObGroup = (items) => items.map(o => {
-    const checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
-    return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>';
-  }).join('');
+  var renderObGroup = function(items){
+    return items.map(function(o){
+      var checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
+      return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>';
+    }).join('');
+  };
 
   openModal('<h2>'+(id?'Editar cliente':'Nuevo cliente')+'</h2>'+
   '<div class="fgrid">'+
@@ -734,12 +785,9 @@ function modalCliente(id){
 
     '<div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">'+
       '<b>Obligaciones Asignadas al Cliente:</b>'+
-      
       '<div class="sec-title">📅 Obligaciones Mensuales</div>'+
       '<div class="ob-grid">'+renderObGroup(mens)+'</div>'+
-
       (sem.length ? '<div class="sec-title">📆 Obligaciones Semestrales</div><div class="ob-grid">'+renderObGroup(sem)+'</div>' : '')+
-
       '<div class="sec-title">🗓️ Obligaciones Anuales</div>'+
       '<div class="ob-grid">'+renderObGroup(anu)+'</div>'+
     '</div>'+
@@ -748,8 +796,8 @@ function modalCliente(id){
 }
 
 function modalObl(key){
-  const list = getOblList();
-  const o = key ? (list.find(x => x.k === key) || {k:key, n:'', f:'P', m:0, d:'RUC'}) : {k:'', n:'', f:'P', m:0, d:'RUC'};
+  var list = getOblList();
+  var o = key ? (list.find(function(x){ return x.k === key; }) || {k:key, n:'', f:'P', m:0, d:'RUC'}) : {k:'', n:'', f:'P', m:0, d:'RUC'};
 
   openModal('<h2>'+(key ? 'Editar Obligación' : 'Nueva Obligación')+'</h2>'+
   '<div class="fgrid">'+
@@ -762,24 +810,24 @@ function modalObl(key){
     '</select></label></div>'+
     '<div><label>Mes de Vencimiento (Anuales)<select id="mo_m">'+
       '<option value="0">Según período</option>'+
-      MESES.map((m,idx) => '<option value="'+(idx+1)+'" '+(o.m===(idx+1)?'selected':'')+'>'+m+'</option>').join('')+
+      MESES.map(function(m,idx){ return '<option value="'+(idx+1)+'" '+(o.m===(idx+1)?'selected':'')+'>'+m+'</option>'; }).join('')+
     '</select></label></div>'+
     '<div class="full"><label>Día de Vencimiento<select id="mo_d">'+
       '<option value="RUC" '+(o.d==='RUC'?'selected':'')+'>Según 9.º dígito del RUC</option>'+
-      [...Array(31)].map((_,i) => '<option value="'+(i+1)+'" '+(String(o.d)===String(i+1)?'selected':'')+'>Día '+(i+1)+'</option>').join('')+
+      [...Array(31)].map(function(_,i){ return '<option value="'+(i+1)+'" '+(String(o.d)===String(i+1)?'selected':'')+'>Día '+(i+1)+'</option>'; }).join('')+
     '</select></label></div>'+
   '</div>'+
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="'+(key||'')+'">Guardar Obligación</button></div>');
 }
 
 function modalClave(){
-  const clis = clientesList();
+  var clis = clientesList();
   openModal('<h2>Nueva Credencial Cifrada</h2>'+
   '<div class="fgrid">'+
     '<div class="full">'+
       '<label>Cliente registrado<select id="vk_cli_sel">'+
         '<option value="">-- Seleccionar cliente --</option>'+
-        clis.map(c => '<option value="'+esc(c.nombre)+'">'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>').join('')+
+        clis.map(function(c){ return '<option value="'+esc(c.nombre)+'">'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+
       '</select></label>'+
     '</div>'+
     '<div class="full"><label>O ingresa el nombre directamente<input id="vk_cli_txt" placeholder="Si no está en la lista de clientes"></label></div>'+
@@ -802,15 +850,15 @@ function modalClave(){
 }
 
 function modalCobro(cid, conceptoDef, montoDef){
-  const clis=activos();
-  const targetCli = cid ? S.clientes[cid] : null;
-  const autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
+  var clis=activos();
+  var targetCli = cid ? S.clientes[cid] : null;
+  var autoMonto = montoDef || (targetCli ? targetCli.tarifa : '');
 
   openModal('<h2>Registrar Cobro / Recibo</h2>'+
   '<div class="fgrid">'+
     '<div class="full"><label>Cliente<select id="mc_cli" data-f="mc_cli_sel">'+
       '<option value="">-- Seleccionar cliente --</option>'+
-      clis.map(c=>'<option value="'+c.id+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+'</option>').join('')+
+      clis.map(function(c){ return '<option value="'+c.id+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+'</option>'; }).join('')+
     '</select></label></div>'+
     
     '<div class="full" id="mc_multi_container">'+
@@ -826,9 +874,9 @@ function modalCobro(cid, conceptoDef, montoDef){
 }
 
 function modalAbono(id){
-  const x = S.cobros[id]; if(!x) return;
-  const c = S.clientes[x.clienteId]||{nombre:'Cliente'};
-  const calc = cobroCalc(x);
+  var x = S.cobros[id]; if(!x) return;
+  var c = S.clientes[x.clienteId]||{nombre:'Cliente'};
+  var calc = cobroCalc(x);
 
   openModal('<h2>Abonar a Cobro Pendiente</h2>'+
   '<p><b>Cliente:</b> '+esc(c.nombre)+'<br><b>Concepto:</b> '+esc(x.concepto)+'<br><b>Saldo Pendiente:</b> <span style="color:var(--bad)">'+money(calc.saldo)+'</span></p>'+
@@ -840,16 +888,16 @@ function modalAbono(id){
 }
 
 function modalAnDist(cid, y, mNum){
-  const c = S.clientes[cid];
-  const mKey = monthKey(y, mNum);
-  const mItems = oblFor(c, 'M');
-  const mAv = avanceOf(cid, mKey);
-  const aItemsInMonth = oblFor(c, 'A').filter(o => oblMonthIndex(c, o.k) === mNum);
-  const aAv = avanceOf(cid, String(y));
+  var c = S.clientes[cid];
+  var mKey = monthKey(y, mNum);
+  var mItems = oblFor(c, 'M');
+  var mAv = avanceOf(cid, mKey);
+  var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
+  var aAv = avanceOf(cid, String(y));
 
   openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
-  (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(o=>'<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div>':'')+
-  (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(o=>'<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>').join('')+'</div>':'')+
+  (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(function(o){ return '<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
+  (aItemsInMonth.length?'<b>Anuales ('+y+'):</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(function(o){ return '<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0">'+
   '<div style="display:flex;justify-content:space-between;align-items:center">'+
     (c.cobra !== false ? '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'">+ Registrar cobro/honorario</button>' : '<span></span>')+
@@ -858,12 +906,12 @@ function modalAnDist(cid, y, mNum){
 }
 
 function imprimirReciboCobro(id){
-  const x = S.cobros[id]; if(!x) return;
-  const c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
-  const calc = cobroCalc(x);
-  const ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1].f : x.fechaEmision;
+  var x = S.cobros[id]; if(!x) return;
+  var c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
+  var calc = cobroCalc(x);
+  var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1].f : x.fechaEmision;
 
-  const html = '<div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">'+
+  var html = '<div style="border:2px solid #000;padding:25px;max-width:650px;margin:0 auto;border-radius:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
           '<h2 style="margin:0;font-size:22px">COMPROBANTE / RECIBO DE COBRO</h2>'+
@@ -907,126 +955,126 @@ function imprimirReciboCobro(id){
 }
 
 /* ============ MANEJO DE EVENTOS ============ */
-const ACT={
-  tab:d=>{UI.tab=d.k;render()},
-  ctype:d=>{UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render()},
-  ayShift:d=>{UI.ay+=+d.dir;render()},
-  loginGate:()=>{
-    const p=val('g_pass_input');
+var ACT={
+  tab:function(d){UI.tab=d.k;render();},
+  ctype:function(d){UI.ctype=d.k;UI.cper=defaultPeriod(d.k);render();},
+  ayShift:function(d){UI.ay+=+d.dir;render();},
+  loginGate:function(){
+    var p=val('g_pass_input');
     if(p===gateCfg()){ GATE.logged=true; render(); }
     else toast('Contraseña incorrecta');
   },
-  lockApp:()=>{ GATE.logged=false; render(); toast('Sesión cerrada'); },
-  saveGatePass:()=>{
-    const p=val('set_gate_pass').trim();
+  lockApp:function(){ GATE.logged=false; render(); toast('Sesión cerrada'); },
+  saveGatePass:function(){
+    var p=val('set_gate_pass').trim();
     if(p){ localStorage.setItem('bitacora_gate_pass',p); toast('Clave guardada'); }
     else { localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); }
     GATE.logged=true; render();
   },
-  removeGatePass:()=>{ localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); GATE.logged=true; render(); },
-  nuevaObl:()=>modalObl(null),
-  editObl:d=>modalObl(d.k),
-  saveObl:async d=>{
-    const k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d');
-    if(!k||!n){toast('Ingresa código y nombre');return}
+  removeGatePass:function(){ localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); GATE.logged=true; render(); },
+  nuevaObl:function(){ modalObl(null); },
+  editObl:function(d){ modalObl(d.k); },
+  saveObl:async function(d){
+    var k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d');
+    if(!k||!n){toast('Ingresa código y nombre');return;}
     
     if(Object.keys(S.catObl).length===0){
-      DEFAULT_OBL.forEach(o=>{ S.catObl[o.k]=o; });
+      DEFAULT_OBL.forEach(function(o){ S.catObl[o.k]=o; });
     }
     
-    const item = {k, n, f, m, d: dVal==='RUC'?'RUC':+dVal};
+    var item = {k:k, n:n, f:f, m:m, d: dVal==='RUC'?'RUC':+dVal};
     await Store.put('catObl', k, item);
     closeModal(); toast('Obligación guardada');
   },
-  delObl:async d=>{
+  delObl:async function(d){
     if(Object.keys(S.catObl).length===0){
-      DEFAULT_OBL.forEach(o=>{ S.catObl[o.k]=o; });
+      DEFAULT_OBL.forEach(function(o){ S.catObl[o.k]=o; });
     }
     await Store.del('catObl', d.k);
     toast('Obligación eliminada');
   },
-  toggle:async d=>{
-    const id=d.c+'__'+d.k, av=clean(avanceOf(d.c,d.k)); av.clienteId=d.c; av.periodo=d.k; av.done=av.done||{};
+  toggle:async function(d){
+    var id=d.c+'__'+d.k, av=clean(avanceOf(d.c,d.k)); av.clienteId=d.c; av.periodo=d.k; av.done=av.done||{};
     if(av.done[d.o]) delete av.done[d.o]; else av.done[d.o]=true;
     await Store.put('avances',id,av);
     if($('#modal').firstChild){
-      const mExact = d.m ? Number(d.m) : (d.k.includes('-') ? Number(d.k.split('-')[1]) : 1);
+      var mExact = d.m ? Number(d.m) : (d.k.includes('-') ? Number(d.k.split('-')[1]) : 1);
       modalAnDist(d.c, UI.ay, mExact);
     }
   },
-  nuevoCobro:()=>modalCobro(null, '', ''),
-  crearCobroDesdeModal:d=>modalCobro(d.c, 'Honorarios / Declaración '+d.m, ''),
-  saveCobro:async()=>{
-    const clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), pagado=+val('mc_pag'), fechaEmision=val('mc_fec'), fechaPago=val('mc_fec_pago');
-    if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return}
-    const id='cb_'+uid();
-    const abonos = pagado > 0 ? [{f:fechaPago||fechaEmision, m:pagado}] : [];
-    await Store.put('cobros',id,{id,clienteId,concepto,monto,fechaEmision,abonos});
+  nuevoCobro:function(){ modalCobro(null, '', ''); },
+  crearCobroDesdeModal:function(d){ modalCobro(d.c, 'Honorarios / Declaración '+d.m, ''); },
+  saveCobro:async function(){
+    var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), pagado=+val('mc_pag'), fechaEmision=val('mc_fec'), fechaPago=val('mc_fec_pago');
+    if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return;}
+    var id='cb_'+uid();
+    var abonos = pagado > 0 ? [{f:fechaPago||fechaEmision, m:pagado}] : [];
+    await Store.put('cobros',id,{id:id,clienteId:clienteId,concepto:concepto,monto:monto,fechaEmision:fechaEmision,abonos:abonos});
     closeModal(); toast('Cobro registrado');
   },
-  abonarCobro:d=>modalAbono(d.id),
-  saveAbono:async d=>{
-    const monto = +val('ma_monto'), fec = val('ma_fec');
-    if(!monto||!fec){toast('Ingresa monto y fecha');return}
-    const x = clean(S.cobros[d.id]);
+  abonarCobro:function(d){ modalAbono(d.id); },
+  saveAbono:async function(d){
+    var monto = +val('ma_monto'), fec = val('ma_fec');
+    if(!monto||!fec){toast('Ingresa monto y fecha');return;}
+    var x = clean(S.cobros[d.id]);
     x.abonos = x.abonos || [];
     x.abonos.push({f:fec, m:monto});
     await Store.put('cobros', d.id, x);
     closeModal(); toast('Abono registrado');
   },
-  imprimirRecibo:d=>imprimirReciboCobro(d.id),
-  vSetup:async()=>{
-    const p=val('v_pass');
-    if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return}
-    const salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter);
-    await Store.put('boveda','meta',{salt:b64(salt),iter,check:await encJSON(key,{ok:'BITACORA'})});
+  imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
+  vSetup:async function(){
+    var p=val('v_pass');
+    if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;}
+    var salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter);
+    await Store.put('boveda','meta',{salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA'})});
     VAULT.key=key; render(); toast('Bóveda configurada');
   },
-  vUnlock:async()=>{
-    const p=val('v_pass'),m=S.boveda.meta;
+  vUnlock:async function(){
+    var p=val('v_pass'),m=S.boveda.meta;
     try{
-      const key=await deriveKey(p,unb64(m.salt),m.iter);
-      const ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
+      var key=await deriveKey(p,unb64(m.salt),m.iter);
+      var ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0;
       VAULT.key=key; await loadVaultItems(); render(); toast('Bóveda abierta');
-    }catch(e){toast('Clave incorrecta')}
+    }catch(e){toast('Clave incorrecta');}
   },
-  vLock:()=>{VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada')},
-  nuevaClave:()=>modalClave(),
-  saveClave:async()=>{
-    const cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim();
-    const cli = cliSel || cliTxt;
+  vLock:function(){ VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada'); },
+  nuevaClave:function(){ modalClave(); },
+  saveClave:async function(){
+    var cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim();
+    var cli = cliSel || cliTxt;
 
-    let srv = val('vk_srv_sel');
+    var srv = val('vk_srv_sel');
     if(srv==='OTRO') srv = val('vk_srv_txt').trim();
 
-    const usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim();
+    var usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim();
 
-    if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return}
+    if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return;}
     VAULT.data.push({cliente:cli,servicio:srv||'SRI',usuario:usr,clave:pwd});
     await saveVaultItems(); closeModal(); render(); toast('Credencial guardada');
   },
-  delClave:async d=>{
+  delClave:async function(d){
     VAULT.data.splice(Number(d.i),1);
     await saveVaultItems(); render(); toast('Credencial eliminada');
   },
-  showPass:d=>{
-    const el=$('#vp_'+d.i);
+  showPass:function(d){
+    var el=$('#vp_'+d.i);
     if(el) el.type = el.type==='password'?'text':'password';
   },
-  nuevoCliente:()=>modalCliente(null),
-  editCliente:d=>modalCliente(d.id),
-  saveCliente:d=>{
-    const nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim();
-    if(!nombre||!ruc){toast('Llena nombre y RUC');return}
+  nuevoCliente:function(){ modalCliente(null); },
+  editCliente:function(d){ modalCliente(d.id); },
+  saveCliente:function(d){
+    var nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim();
+    if(!nombre||!ruc){toast('Llena nombre y RUC');return;}
     
-    const oblMap = {};
-    document.querySelectorAll('.chk-obl').forEach(chk => {
+    var oblMap = {};
+    document.querySelectorAll('.chk-obl').forEach(function(chk){
       oblMap[chk.dataset.k] = chk.checked;
     });
 
-    const c={
-      nombre,
-      ruc,
+    var c={
+      nombre:nombre,
+      ruc:ruc,
       tipo:val('m_tipo'),
       grupo:val('m_grupo').trim(),
       cobra: val('m_cobra') === 'true',
@@ -1041,29 +1089,29 @@ const ACT={
     closeModal();
     toast('Cliente guardado');
   },
-  anCellDist:d=>modalAnDist(d.c, +d.y, +d.m),
-  close:()=>closeModal(),
-  bgclose:(d,e)=>{if(e.target.classList.contains('bg'))closeModal()}
+  anCellDist:function(d){ modalAnDist(d.c, +d.y, +d.m); },
+  close:function(){ closeModal(); },
+  bgclose:function(d,e){ if(e.target.classList.contains('bg'))closeModal(); }
 };
 
-document.addEventListener('click',e=>{
-  const b=e.target.closest('[data-a]');if(!b)return;
-  const fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e);
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]');if(!b)return;
+  var fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e);
 });
 
-document.addEventListener('input',e=>{
-  const t=e.target, f=t.dataset&&t.dataset.f;
+document.addEventListener('input',function(e){
+  var t=e.target, f=t.dataset&&t.dataset.f;
   if(!f) return;
 
   if(f==='q_cli' || f==='q_ctrl' || f==='q_anual'){
     UI[f] = t.value;
-    const currentPos = t.selectionStart;
+    var currentPos = t.selectionStart;
 
     if(UI.tab==='clientes') $('#main').innerHTML = vClientes();
     else if(UI.tab==='control') $('#main').innerHTML = vControl();
     else if(UI.tab==='anual') $('#main').innerHTML = vAnual();
 
-    const inputRef = $('#src_' + f);
+    var inputRef = $('#src_' + f);
     if(inputRef){
       inputRef.focus();
       inputRef.setSelectionRange(currentPos, currentPos);
@@ -1071,18 +1119,18 @@ document.addEventListener('input',e=>{
   }
 });
 
-document.addEventListener('change',e=>{
-  const t=e.target,f=t.dataset&&t.dataset.f;
-  if(f==='cper'){UI.cper=t.value;render()}
-  else if(f==='fgr'){UI.fgr=t.value;render()}
+document.addEventListener('change',function(e){
+  var t=e.target,f=t.dataset&&t.dataset.f;
+  if(f==='cper'){UI.cper=t.value;render();}
+  else if(f==='fgr'){UI.fgr=t.value;render();}
   else if(f==='srv_sel'){
-    const txt=$('#vk_srv_txt');
+    var txt=$('#vk_srv_txt');
     if(txt) txt.style.display = t.value==='OTRO'?'block':'none';
   }
   else if(f==='mc_cli_sel'){
-    const c = S.clientes[t.value];
+    var c = S.clientes[t.value];
     if(c && c.tarifa){
-      const mon=$('#mc_mon'), pag=$('#mc_pag');
+      var mon=$('#mc_mon'), pag=$('#mc_pag');
       if(mon) mon.value = c.tarifa;
       if(pag) pag.value = c.tarifa;
     }
