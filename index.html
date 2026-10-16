@@ -122,7 +122,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
   } catch(e) {
-    console.warn("Firebase no se pudo inicializar en este entorno:", e);
+    console.warn("Firebase no disponible en local:", e);
   }
 
   window.claude = {
@@ -349,13 +349,12 @@ const Store={
     let db=null;
     try{if(window.claude&&window.claude.use)db=await window.claude.use('db')}catch(e){db=null}
     
-    // Timeout de seguridad de 2.5s para no quedarse en "Cargando..."
     setTimeout(()=>{
       if(!S.ready){
         S.ready=true;
         render();
       }
-    }, 2500);
+    }, 2000);
 
     if(db){
       this.db=db;S.kind='nube';
