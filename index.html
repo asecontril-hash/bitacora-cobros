@@ -100,7 +100,10 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 @media print {
   body * { visibility: hidden !important; }
-  #print-area, #print-area * { visibility: visible !important; }
+  #print-area, #print-area * {
+    visibility: visible !important;
+    box-sizing: border-box !important;
+  }
   #print-area {
     display: block !important;
     position: absolute !important;
@@ -110,11 +113,23 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     color: #000 !important;
     background: #fff !important;
     padding: 0 !important;
+    margin: 0 !important;
     font-family: Arial, Helvetica, sans-serif !important;
+  }
+  #print-area .print-card {
+    box-sizing: border-box !important;
+    border: 2px solid #0f6b6b !important;
+    padding: 18px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    background: #fff !important;
+    color: #000 !important;
   }
   #print-area table {
     display: table !important;
     width: 100% !important;
+    table-layout: fixed !important;
     border-collapse: collapse !important;
     margin-bottom: 15px !important;
   }
@@ -127,6 +142,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     padding: 6px 8px !important;
     font-size: 13px !important;
     color: #000 !important;
+    word-wrap: break-word !important;
   }
   #print-area th {
     background-color: #ffffff !important;
@@ -1146,14 +1162,14 @@ function modalAnDist(cid, y, mNum){
   '</div>');
 }
 
-/* ============ VISTAS DE IMPRESIÓN CORREGIDAS (FORMATO EXACTO CORTESÍA DE IMAGEN) ============ */
+/* ============ VISTAS DE IMPRESIÓN OPTIMIZADAS AL BORDER ============ */
 function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return;
   var c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
   var calc = cobroCalc(x);
   var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
 
-  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:700px;margin:0 auto;background:#fff;color:#000">'+
+  var html = '<div class="print-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
           '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
@@ -1169,18 +1185,18 @@ function imprimirReciboCobro(id){
         '<tr><td style="padding:3px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:3px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr>'+
       '</table>'+
       '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">RECIBO</div>'+
-      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:140px">FECHA DE EMISIÓN</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:110px">VALOR</th>'+
+            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           '<tr>'+
             '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
-            '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(x.concepto)+'</td>'+
             '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.pagado)+'</td>'+
           '</tr>'+
           '<tr style="font-weight:bold">'+
@@ -1204,7 +1220,7 @@ function imprimirEstadoCuenta(cid){
   var pends = cobrosList().filter(function(x){ return x.clienteId === cid && !x.anulado && cobroCalc(x).saldo > 0; });
   var totalSaldo = pends.reduce(function(s, x){ return s + cobroCalc(x).saldo; }, 0);
 
-  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:700px;margin:0 auto;background:#fff;color:#000">'+
+  var html = '<div class="print-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
           '<h1 style="margin:0;font-size:26px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
@@ -1219,12 +1235,12 @@ function imprimirEstadoCuenta(cid){
         '<tr><td style="padding:3px 0;border:none"><strong>RAZÓN SOCIAL:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0;border:none"><strong>RUC / C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
       '</table>'+
       '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">ESTADO DE CUENTA</div>'+
-      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:140px">FECHA DE EMISIÓN</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:110px">VALOR</th>'+
+            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
@@ -1232,7 +1248,7 @@ function imprimirEstadoCuenta(cid){
             var calc = cobroCalc(x);
             return '<tr>'+
               '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(x.concepto)+'</td>'+
               '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.saldo)+'</td>'+
             '</tr>';
           }).join('')+
@@ -1256,7 +1272,7 @@ function imprimirReciboMultiple(rid){
   var r = S.recibos[rid]; if(!r) return;
   var c = S.clientes[r.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
 
-  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:700px;margin:0 auto;background:#fff;color:#000">'+
+  var html = '<div class="print-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
           '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
@@ -1272,19 +1288,19 @@ function imprimirReciboMultiple(rid){
         '<tr><td style="padding:3px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:3px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(r.referencia||'N/A')+'</td></tr>'+
       '</table>'+
       '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">RECIBO</div>'+
-      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:140px">FECHA DE EMISIÓN</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:110px">VALOR</th>'+
+            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           r.detalles.map(function(d){
             return '<tr>'+
               '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(r.fecha)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px">'+esc(d.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(d.concepto)+'</td>'+
               '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(d.monto)+'</td>'+
             '</tr>';
           }).join('')+
