@@ -1636,3 +1636,64 @@ var ACT={
       activo: val('m_activo') === 'true',
       cobra: val('m_cobra') === 'true',
       tarifa: +val('m_tarifa') || 0,
+      cobroFreq: val('m_cobroFreq'),
+      doc: val('m_doc'),
+      obl: oblMap
+    };
+
+    Store.put('clientes', d.id || ('c' + ruc), c);
+    closeModal();
+    toast('Cliente guardado');
+  },
+  anCellDist:function(d){ modalAnDist(d.c, +d.y, +d.m); },
+  close:function(){ closeModal(); },
+  bgclose:function(d,e){ if(e.target.classList.contains('bg'))closeModal(); }
+};
+
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]');if(!b)return;
+  var fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e);
+});
+
+document.addEventListener('input',function(e){
+  var t=e.target, f=t.dataset&&t.dataset.f;
+  if(!f) return;
+
+  if(f==='q_cli' || f==='q_ctrl' || f==='q_anual'){
+    UI[f] = t.value;
+    var currentPos = t.selectionStart;
+
+    if(UI.tab==='clientes') $('#main').innerHTML = vClientes();
+    else if(UI.tab==='control') $('#main').innerHTML = vControl();
+    else if(UI.tab==='anual') $('#main').innerHTML = vAnual();
+
+    var inputRef = $('#src_' + f);
+    if(inputRef){
+      inputRef.focus();
+      inputRef.setSelectionRange(currentPos, currentPos);
+    }
+  }
+});
+
+document.addEventListener('change',function(e){
+  var t=e.target,f=t.dataset&&t.dataset.f;
+  if(f==='cper'){UI.cper=t.value;render();}
+  else if(f==='fgr'){UI.fgr=t.value;render();}
+  else if(f==='srv_sel'){
+    var txt=$('#vk_srv_txt');
+    if(txt) txt.style.display = t.value==='OTRO'?'block':'none';
+  }
+  else if(f==='mc_cli_sel'){
+    var c = S.clientes[t.value];
+    if(c && c.tarifa){
+      var mon=$('#mc_mon');
+      if(mon) mon.value = c.tarifa;
+    }
+  }
+});
+
+UI.cper=defaultPeriod('M');
+Store.init();
+</script>
+</body>
+</html>
