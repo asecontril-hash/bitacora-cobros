@@ -343,7 +343,8 @@ function existeCobro(clienteId, concepto) {
 
 function oblFor(c, t){
   return getOblList().filter(function(o){
-    if(!c.obl || c.obl[o.k] === false) return false;
+    if(c.obl && c.obl[o.k] === false) return false;
+    if(c.obl && c.obl[o.k] === true) return true;
     if(o.k === 'SUPERCIAS' && c.tipo !== 'SOCIEDAD') return false;
     if(t === 'M') return o.f === 'P';
     if(t === 'S') return o.f === 'S';
@@ -359,7 +360,7 @@ function oblPendientesCliente(c){
   var m = now.getMonth() + 1;
   var pends = [];
 
-  // Revisar mes actual
+  // Revisar únicamente las obligaciones efectivamente asignadas al cliente
   var mKey = monthKey(y, m);
   var mItems = oblFor(c, 'M');
   var mAv = avanceOf(c.id, mKey);
@@ -367,13 +368,14 @@ function oblPendientesCliente(c){
     if(!mAv.done || !mAv.done[o.k]) pends.push(o.n + ' (' + MESES[m-1] + ')');
   });
 
-  // Revisar semestrales
   var sItems = oblFor(c, 'S');
-  var sKey = m >= 7 ? y + '-S1' : (y - 1) + '-S2';
-  var sAv = avanceOf(c.id, sKey);
-  sItems.forEach(function(o){
-    if(!sAv.done || !sAv.done[o.k]) pends.push(o.n + ' (' + sKey + ')');
-  });
+  if(sItems.length){
+    var sKey = m >= 7 ? y + '-S1' : (y - 1) + '-S2';
+    var sAv = avanceOf(c.id, sKey);
+    sItems.forEach(function(o){
+      if(!sAv.done || !sAv.done[o.k]) pends.push(o.n + ' (' + sKey + ')');
+    });
+  }
 
   return pends;
 }
@@ -937,7 +939,7 @@ function modalCliente(id){
     nombre:'',ruc:'',celular:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
     contabilidad:false,cobra:true,tarifa:0,
     cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',
-    obl:{F103_104:true,F104_SEM1:true,F104_SEM2:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
+    obl:{F103_104:true,F104_SEM1:false,F104_SEM2:false,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
   };
   var cat = getOblList();
 
@@ -947,7 +949,7 @@ function modalCliente(id){
 
   var renderObGroup = function(items){
     return items.map(function(o){
-      var checked = (c.obl && c.obl[o.k] !== false) ? 'checked' : '';
+      var checked = (c.obl && c.obl[o.k] === true) ? 'checked' : '';
       return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>';
     }).join('');
   };
@@ -1154,6 +1156,7 @@ function modalAnDist(cid, y, mNum){
   '</div>');
 }
 
+/* ============ VISTAS DE IMPRESIÓN (RESUMIDAS EN 3 COLUMNAS) ============ */
 function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return;
   var c = S.clientes[x.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
@@ -1168,34 +1171,35 @@ function imprimirReciboCobro(id){
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
-          '<div style="font-size:12px;color:#000">Fecha: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div>'+
+          '<div style="font-size:12px;color:#000">Fecha de Cobro: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div>'+
         '</div>'+
       '</div>'+
       '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
         '<tr><td style="padding:3px 0"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
         '<tr><td style="padding:3px 0"><strong>FORMA DE PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:3px 0"><strong>N.° REF / BANCO:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr>'+
-        '<tr><td colspan="2" style="padding:5px 0 0 0"><strong>CONCEPTO:</strong> '+esc(x.concepto)+'</td></tr>'+
       '</table>'+
       '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Detalle / Período</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Total</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Pagado</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Saldo</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2;width:120px">Fecha Emisión</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Concepto / Detalle</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2;width:120px">Valor ($)</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           '<tr>'+
+            '<td style="border:1px solid #000;padding:6px">'+fmtDate(x.fechaEmision)+'</td>'+
             '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(x.monto)+'</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right;font-weight:bold">'+money(calc.pagado)+'</td>'+
+          '</tr>'+
+          '<tr style="font-weight:bold;background:#fafafa">'+
+            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:right">VALOR RECIBIDO:</td>'+
             '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.pagado)+'</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.saldo)+'</td>'+
           '</tr>'+
         '</tbody>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme<br>ASECONTRIL</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
         '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
@@ -1224,14 +1228,13 @@ function imprimirEstadoCuenta(cid){
       '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
         '<tr><td style="padding:3px 0"><strong>RAZÓN SOCIAL:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0"><strong>RUC / C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
       '</table>'+
-      '<h3 style="font-size:14px;margin:10px 0 5px 0;border-bottom:1px solid #ccc;padding-bottom:3px">1. Detalle de Valores Pendientes por Cobrar</h3>'+
+      '<h3 style="font-size:14px;margin:10px 0 5px 0;border-bottom:1px solid #ccc;padding-bottom:3px">1. Detalle de Cuentas por Cobrar Pendientes</h3>'+
       '<table style="width:100%;border-collapse:collapse;margin-bottom:15px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Fecha Emisión</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2;width:120px">Fecha Emisión</th>'+
             '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Concepto / Detalle</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Total</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Saldo Pendiente</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2;width:120px">Valor ($)</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
@@ -1240,12 +1243,11 @@ function imprimirEstadoCuenta(cid){
             return '<tr>'+
               '<td style="border:1px solid #000;padding:6px">'+fmtDate(x.fechaEmision)+'</td>'+
               '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(x.monto)+'</td>'+
               '<td style="border:1px solid #000;padding:6px;text-align:right;font-weight:bold">'+money(calc.saldo)+'</td>'+
             '</tr>';
           }).join('')+
           '<tr style="font-weight:bold;background:#fafafa">'+
-            '<td colspan="3" style="border:1px solid #000;padding:6px;text-align:right">TOTAL PENDIENTE DE PAGO:</td>'+
+            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:right">TOTAL A CANCELAR:</td>'+
             '<td style="border:1px solid #000;padding:6px;text-align:right;color:#b42318">'+money(totalSaldo)+'</td>'+
           '</tr>'+
         '</tbody>'+
@@ -1255,11 +1257,11 @@ function imprimirEstadoCuenta(cid){
         '<ul style="font-size:13px;margin:5px 0 15px 20px;padding:0">'+
           oblPends.map(function(o){ return '<li style="margin-bottom:3px">'+esc(o)+'</li>'; }).join('')+
         '</ul>'+
-        '<p style="font-size:11px;font-style:italic;color:#555">* Nota: El ingreso de las declaraciones tributarias en el portal del SRI está sujeto a la cancelación del saldo pendiente arriba detallado.</p>'
-        : '<p style="font-size:12px;color:#1a7f4b">✓ No registra obligaciones tributarias pendientes para el ciclo actual.</p>'
+        '<p style="font-size:11px;font-style:italic;color:#555">* Nota: El ingreso de las declaraciones tributarias en el portal del SRI está sujeto a la cancelación del valor pendiente arriba detallado.</p>'
+        : '<p style="font-size:12px;color:#1a7f4b">✓ No registra obligaciones tributarias pendientes asignadas para el ciclo actual.</p>'
       )+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Departamento de Cobranzas<br><strong>ASECONTRIL</strong></div>'+
+        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Asesoría Contable y Tributaria</div>'+
         '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Conforme Cliente</div>'+
       '</div>'+
     '</div>';
@@ -1280,7 +1282,7 @@ function imprimirReciboMultiple(rid){
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div>'+
-          '<div style="font-size:12px;color:#000">Fecha: '+fmtDate(r.fecha)+'</div>'+
+          '<div style="font-size:12px;color:#000">Fecha de Cobro: '+fmtDate(r.fecha)+'</div>'+
         '</div>'+
       '</div>'+
       '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
@@ -1290,17 +1292,17 @@ function imprimirReciboMultiple(rid){
       '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:center;width:35px;background:#f2f2f2">#</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Detalle / Servicios Cancelados</th>'+
-            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Cancelado</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2;width:120px">Fecha Emisión</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Concepto / Detalle</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2;width:120px">Valor ($)</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
-          r.detalles.map(function(d, idx){
+          r.detalles.map(function(d){
             return '<tr>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:center">'+(idx+1)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px">'+fmtDate(r.fecha)+'</td>'+
               '<td style="border:1px solid #000;padding:6px">'+esc(d.concepto)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(d.monto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:right;font-weight:bold">'+money(d.monto)+'</td>'+
             '</tr>';
           }).join('')+
           '<tr style="font-weight:bold;background:#fafafa">'+
@@ -1310,7 +1312,7 @@ function imprimirReciboMultiple(rid){
         '</tbody>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme<br>ASECONTRIL</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
         '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
