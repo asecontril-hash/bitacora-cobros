@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Bitácora de clientes y cobros</title>
+<title>Bitácora de clientes y cobros - ASECONTRIL</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 :root{
@@ -143,7 +143,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>📒 Bitácora de clientes y cobros</h1>
+    <h1>📒 Bitácora de clientes y cobros · <strong>ASECONTRIL</strong></h1>
     <span class="sub" id="stat"></span>
     <button class="btn sm danger" id="lockbtn" data-a="lockApp" style="display:none">🔒 Cerrar sesión</button>
   </header>
@@ -297,7 +297,7 @@ function daysTo(d){ return Math.round((d-midnight())/864e5); }
 function matchesQ(c, qTerm){
   if(!qTerm) return true;
   var q=qTerm.toLowerCase().trim();
-  return (c.nombre||'').toLowerCase().includes(q)||(c.ruc||'').includes(q)||(c.grupo||'').toLowerCase().includes(q);
+  return (c.nombre||'').toLowerCase().includes(q)||(c.ruc||'').includes(q)||(c.celular||'').includes(q)||(c.grupo||'').toLowerCase().includes(q);
 }
 
 function clientesList(){
@@ -312,6 +312,7 @@ function gruposList(){
 function tagsCli(c){
   return (c.activo===false?'<span class="chip warn">⏸ Suspendido</span> ':'')+
          (c.grupo?'<span class="chip info">🏢 '+esc(c.grupo)+'</span> ':'')+
+         (c.celular?'<span class="chip info">📱 '+esc(c.celular)+'</span> ':'')+
          (c.cobra===false?'<span class="chip mut">Gratuito</span> ':'<span class="chip ok">$'+(c.tarifa||0)+'</span> ')+
          (c.doc==='factura'?'<span class="chip info">Factura</span>':'<span class="chip mut">Recibo</span>');
 }
@@ -326,7 +327,7 @@ function grpSelect(){
 }
 
 function searchInput(fieldKey, valStr){
-  return '<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente o RUC…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">';
+  return '<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente, RUC o celular…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">';
 }
 
 function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
@@ -352,6 +353,30 @@ function oblFor(c, t){
 }
 
 function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
+
+function oblPendientesCliente(c){
+  var y = now.getFullYear();
+  var m = now.getMonth() + 1;
+  var pends = [];
+
+  // Revisar mes actual
+  var mKey = monthKey(y, m);
+  var mItems = oblFor(c, 'M');
+  var mAv = avanceOf(c.id, mKey);
+  mItems.forEach(function(o){
+    if(!mAv.done || !mAv.done[o.k]) pends.push(o.n + ' (' + MESES[m-1] + ')');
+  });
+
+  // Revisar semestrales
+  var sItems = oblFor(c, 'S');
+  var sKey = m >= 7 ? y + '-S1' : (y - 1) + '-S2';
+  var sAv = avanceOf(c.id, sKey);
+  sItems.forEach(function(o){
+    if(!sAv.done || !sAv.done[o.k]) pends.push(o.n + ' (' + sKey + ')');
+  });
+
+  return pends;
+}
 
 function rowsFor(t,k){
   return activos().map(function(c){
@@ -481,7 +506,7 @@ function render(){
   if(cfgPass && !GATE.logged){
     $('#tabs').innerHTML=''; $('#stat').textContent='';
     $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
-      '<h2 style="margin-bottom:8px">🔒 Acceso a Bitácora</h2>'+
+      '<h2 style="margin-bottom:8px">🔒 Acceso a Bitácora ASECONTRIL</h2>'+
       '<p class="sm" style="margin-bottom:16px">Ingresa tu contraseña de inicio:</p>'+
       '<input type="password" id="g_pass_input" placeholder="Contraseña de acceso" style="width:100%;margin-bottom:12px" onkeydown="if(event.key===\'Enter\')ACT.loginGate()">'+
       '<button class="btn pri" data-a="loginGate" style="width:100%">Desbloquear e ingresar</button>'+
@@ -721,7 +746,7 @@ function vCobros(){
   var porCliente = {};
 
   rawList.forEach(function(x){
-    var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:''};
+    var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:'', celular:''};
     var calc = cobroCalc(x);
     if(!porCliente[x.clienteId]){
       porCliente[x.clienteId] = {cliente: c, cid: x.clienteId, totalMonto: 0, totalSaldo: 0, pendientes: []};
@@ -739,16 +764,21 @@ function vCobros(){
     '<button class="btn danger" data-a="borrarTodasCuentas">🗑️ Borrar toda la información de cuentas por cobrar</button>'+
   '</div>'+
   '<div class="card">'+
-    '<b>📌 Estado de Cuentas por Cobrar Agrupadas por Cliente</b>'+
+    '<b>📌 Estado de Cuentas por Cobrar Agrupadas por Cliente (ASECONTRIL)</b>'+
     (clientesArray.length ? clientesArray.map(function(group){
       return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;background:var(--card)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px">'+
           '<div>'+
-            '<b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+')</span>'+
+            '<b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+' · 📱 '+(esc(group.cliente.celular)||<span style="color:var(--bad)">Sin celular</span>)+')</span>'+
           '</div>'+
           '<div>'+
             '<span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> '+
-            (group.totalSaldo>0 ? '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Cobro Múltiple de Cuentas</button>' : '')+
+            (group.totalSaldo>0 ? 
+              '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Cobro Múltiple</button> '+
+              '<button class="btn sm info" data-a="modalNotifCobro" data-cid="'+group.cid+'">📱 Notificar WhatsApp</button> '+
+              '<button class="btn sm" data-a="imprimirEstadoCuenta" data-cid="'+group.cid+'">🖨️ PDF Estado Cuenta</button>'
+              : ''
+            )+
           '</div>'+
         '</div>'+
         '<div class="tablewrap"><table style="font-size:13px">'+
@@ -801,12 +831,14 @@ function vClientes(){
   '</div>'+
   '<div class="card">'+
   (L.length?'<div class="tablewrap"><table>'+
-    '<thead><tr><th>Cliente</th><th>RUC</th><th>Tipo</th><th>Cobro / Doc.</th><th>Estado</th><th>Acciones</th></tr></thead>'+
+    '<thead><tr><th>Cliente</th><th>RUC</th><th>Celular / WhatsApp</th><th>Tipo</th><th>Cobro / Doc.</th><th>Estado</th><th>Acciones</th></tr></thead>'+
     '<tbody>'+L.map(function(c){
       var isAct = c.activo !== false;
       return '<tr>'+
         '<td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td>'+
-        '<td>'+esc(c.ruc)+'</td><td>'+esc(c.tipo)+'</td>'+
+        '<td>'+esc(c.ruc)+'</td>'+
+        '<td><b>'+(esc(c.celular)||'—')+'</b></td>'+
+        '<td>'+esc(c.tipo)+'</td>'+
         '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b><div class="sm">'+(c.doc==='factura'?'Factura':'Recibo interno')+'</div></td>'+
         '<td>'+(isAct ? '<span class="chip ok">Activo</span>' : '<span class="chip warn">⏸ Suspendido</span>')+'</td>'+
         '<td>'+
@@ -853,9 +885,54 @@ function openModal(html,wide){
 function closeModal(){$('#modal').innerHTML=''}
 function val(id){ var e=document.getElementById(id); return e?e.value:''; }
 
+function modalNotifCobro(cid){
+  var c = S.clientes[cid] || {nombre: 'Cliente', ruc: '', celular: ''};
+  var pends = cobrosList().filter(function(x){ return x.clienteId === cid && !x.anulado && cobroCalc(x).saldo > 0; });
+  var totalSaldo = pends.reduce(function(s, x){ return s + cobroCalc(x).saldo; }, 0);
+  var oblPends = oblPendientesCliente(c);
+
+  var msg = "🏢 *ASECONTRIL - Asesoría Contable y Tributaria*\n";
+  msg += "📋 *ESTADO DE CUENTA Y OBLIGACIONES PENDIENTES*\n\n";
+  msg += "Estimado(a) *" + c.nombre + "* (RUC: " + (c.ruc||'S/N') + "):\n\n";
+  msg += "Le compartimos el detalle de los valores pendientes por servicios contables brindados:\n";
+  
+  pends.forEach(function(x){
+    var calc = cobroCalc(x);
+    msg += "• " + x.concepto + ": *" + money(calc.saldo) + "* (Emisión: " + fmtDate(x.fechaEmision) + ")\n";
+  });
+  
+  msg += "\n💰 *TOTAL A CANCELAR: " + money(totalSaldo) + "*\n\n";
+
+  if(oblPends.length){
+    msg += "⚠️ *OBLIGACIONES TRIBUTARIAS PENDIENTES DE PRESENTACIÓN:*\n";
+    oblPends.forEach(function(o){
+      msg += " - " + o + "\n";
+    });
+    msg += "\n_Nota: Para proceder con el ingreso de sus declaraciones al SRI, solicitamos la cancelación del valor pendiente._\n\n";
+  }
+
+  msg += "Agradecemos realizar su transferencia/pago a la brevedad posible para mantener sus obligaciones al día.\n\n";
+  msg += "Quedamos atentos a la recepción de su comprobante de pago.";
+
+  var cleanNum = (c.celular || '').replace(/\D/g, '');
+  if (cleanNum.length === 9 && cleanNum.startsWith('9')) cleanNum = '593' + cleanNum;
+  else if (cleanNum.length === 10 && cleanNum.startsWith('09')) cleanNum = '593' + cleanNum.slice(1);
+
+  var wspUrl = cleanNum ? 'https://wa.me/' + cleanNum + '?text=' + encodeURIComponent(msg) : '';
+
+  openModal('<h2>📱 Enviar Notificación de Cobro · ASECONTRIL</h2>'+
+  '<p class="sm">Cliente: <b>'+esc(c.nombre)+'</b> | Celular: <b>'+(esc(c.celular)||<span style="color:var(--bad)">Sin teléfono registrado</span>)+'</b></p>'+
+  '<textarea id="txt_notif_wsp" style="height:220px;font-family:monospace;font-size:13px">'+esc(msg)+'</textarea>'+
+  '<div class="actions">'+
+    '<button class="btn" data-a="close">Cerrar</button>'+
+    '<button class="btn pri" data-a="copiarWspMsg">📋 Copiar Mensaje</button>'+
+    (wspUrl ? '<a href="'+wspUrl+'" target="_blank" class="btn ok" style="text-decoration:none">📲 Abrir Chat en WhatsApp</a>' : '')+
+  '</div>');
+}
+
 function modalCliente(id){
   var c = id ? S.clientes[id] : {
-    nombre:'',ruc:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
+    nombre:'',ruc:'',celular:'',tipo:'PERSONA NATURAL',regimen:'GENERAL',
     contabilidad:false,cobra:true,tarifa:0,
     cobroFreq:'M',doc:'recibo',grupo:'',referidoPor:'',
     obl:{F103_104:true,F104_SEM1:true,F104_SEM2:true,IM_RTA:true,PM:true,RDEP:true,AGP:true,ATS:true},activo:true
@@ -877,8 +954,9 @@ function modalCliente(id){
   '<div class="fgrid">'+
     '<div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="'+esc(c.nombre)+'"></label></div>'+
     '<div><label>RUC<input id="m_ruc" value="'+esc(c.ruc)+'"></label></div>'+
+    '<div><label>Teléfono / Celular (WhatsApp)<input id="m_celular" placeholder="Ej: 0991234567" value="'+esc(c.celular||'')+'"></label></div>'+
     '<div><label>Tipo de Contribuyente<select id="m_tipo"><option value="PERSONA NATURAL" '+(c.tipo==='PERSONA NATURAL'?'selected':'')+'>Persona Natural</option><option value="SOCIEDAD" '+(c.tipo==='SOCIEDAD'?'selected':'')+'>Sociedad</option></select></label></div>'+
-    '<div class="full"><label>Grupo / Holding<input id="m_grupo" value="'+esc(c.grupo)+'"></label></div>'+
+    '<div><label>Grupo / Holding<input id="m_grupo" value="'+esc(c.grupo)+'"></label></div>'+
     '<div><label>Estado del Cliente<select id="m_activo"><option value="true" '+(c.activo!==false?'selected':'')+'>Activo</option><option value="false" '+(c.activo===false?'selected':'')+'>⏸ Suspendido</option></select></label></div>'+
     
     '<div class="full" style="border-top:1px solid var(--line);padding-top:10px;margin-top:5px">'+
@@ -1080,11 +1158,11 @@ function imprimirReciboCobro(id){
   var calc = cobroCalc(x);
   var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
 
-  var html = '<div style="border:2px solid #000;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
+  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
-          '<h2 style="margin:0;font-size:20px;color:#000">COMPROBANTE DE COBRO</h2>'+
-          '<div style="font-size:12px;color:#333">Servicios Contables y Tributarios</div>'+
+          '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
@@ -1115,8 +1193,72 @@ function imprimirReciboCobro(id){
         '</tbody>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme<br>ASECONTRIL</div>'+
         '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
+      '</div>'+
+    '</div>';
+
+  $('#print-area').innerHTML = html;
+  window.print();
+}
+
+function imprimirEstadoCuenta(cid){
+  var c = S.clientes[cid] || {nombre:'Cliente', ruc:'N/A'};
+  var pends = cobrosList().filter(function(x){ return x.clienteId === cid && !x.anulado && cobroCalc(x).saldo > 0; });
+  var totalSaldo = pends.reduce(function(s, x){ return s + cobroCalc(x).saldo; }, 0);
+  var oblPends = oblPendientesCliente(c);
+
+  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:700px;margin:0 auto;background:#fff;color:#000">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
+        '<div>'+
+          '<h1 style="margin:0;font-size:26px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:14px;font-weight:bold;color:#000">ESTADO DE CUENTA Y OBLIGACIONES</div>'+
+          '<div style="font-size:12px;color:#000">Fecha de emisión: '+fmtD(new Date())+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
+        '<tr><td style="padding:3px 0"><strong>RAZÓN SOCIAL:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0"><strong>RUC / C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+      '</table>'+
+      '<h3 style="font-size:14px;margin:10px 0 5px 0;border-bottom:1px solid #ccc;padding-bottom:3px">1. Detalle de Valores Pendientes por Cobrar</h3>'+
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:15px;font-size:13px">'+
+        '<thead>'+
+          '<tr>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Fecha Emisión</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:left;background:#f2f2f2">Concepto / Detalle</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Monto Total</th>'+
+            '<th style="border:1px solid #000;padding:6px;text-align:right;background:#f2f2f2">Saldo Pendiente</th>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          pends.map(function(x){
+            var calc = cobroCalc(x);
+            return '<tr>'+
+              '<td style="border:1px solid #000;padding:6px">'+fmtDate(x.fechaEmision)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px">'+esc(x.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(x.monto)+'</td>'+
+              '<td style="border:1px solid #000;padding:6px;text-align:right;font-weight:bold">'+money(calc.saldo)+'</td>'+
+            '</tr>';
+          }).join('')+
+          '<tr style="font-weight:bold;background:#fafafa">'+
+            '<td colspan="3" style="border:1px solid #000;padding:6px;text-align:right">TOTAL PENDIENTE DE PAGO:</td>'+
+            '<td style="border:1px solid #000;padding:6px;text-align:right;color:#b42318">'+money(totalSaldo)+'</td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+      (oblPends.length ? 
+        '<h3 style="font-size:14px;margin:15px 0 5px 0;border-bottom:1px solid #ccc;padding-bottom:3px">2. Obligaciones Tributarias Pendientes de Presentación (SRI)</h3>'+
+        '<ul style="font-size:13px;margin:5px 0 15px 20px;padding:0">'+
+          oblPends.map(function(o){ return '<li style="margin-bottom:3px">'+esc(o)+'</li>'; }).join('')+
+        '</ul>'+
+        '<p style="font-size:11px;font-style:italic;color:#555">* Nota: El ingreso de las declaraciones tributarias en el portal del SRI está sujeto a la cancelación del saldo pendiente arriba detallado.</p>'
+        : '<p style="font-size:12px;color:#1a7f4b">✓ No registra obligaciones tributarias pendientes para el ciclo actual.</p>'
+      )+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Departamento de Cobranzas<br><strong>ASECONTRIL</strong></div>'+
+        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Conforme Cliente</div>'+
       '</div>'+
     '</div>';
 
@@ -1128,11 +1270,11 @@ function imprimirReciboMultiple(rid){
   var r = S.recibos[rid]; if(!r) return;
   var c = S.clientes[r.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
 
-  var html = '<div style="border:2px solid #000;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:15px">'+
+  var html = '<div style="border:2px solid #0f6b6b;padding:20px;max-width:650px;margin:0 auto;background:#fff;color:#000">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
         '<div>'+
-          '<h2 style="margin:0;font-size:20px;color:#000">COMPROBANTE DE COBRO CONSOLIDADO</h2>'+
-          '<div style="font-size:12px;color:#333">Servicios Contables y Tributarios</div>'+
+          '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div>'+
@@ -1166,7 +1308,7 @@ function imprimirReciboMultiple(rid){
         '</tbody>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
-        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Entregué Conforme<br>ASECONTRIL</div>'+
         '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
@@ -1242,6 +1384,16 @@ var ACT={
     closeModal(); toast('Pago registrado');
   },
   cobroMultiple:function(d){ modalCobroMultiple(d.cid); },
+  modalNotifCobro:function(d){ modalNotifCobro(d.cid); },
+  copiarWspMsg:function(){
+    var txt = $('#txt_notif_wsp');
+    if(txt){
+      txt.select();
+      document.execCommand('copy');
+      toast('Mensaje copiado al portapapeles');
+    }
+  },
+  imprimirEstadoCuenta:function(d){ imprimirEstadoCuenta(d.cid); },
   calcMultTotal:function(){
     var sum = 0;
     document.querySelectorAll('.chk-cobro-mult:checked').forEach(function(chk){
@@ -1364,6 +1516,7 @@ var ACT={
     var c={
       nombre:nombre,
       ruc:ruc,
+      celular:val('m_celular').trim(),
       tipo:val('m_tipo'),
       grupo:val('m_grupo').trim(),
       activo: val('m_activo') === 'true',
