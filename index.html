@@ -461,13 +461,15 @@ function vPanel(){
   '</div>';
 }
 
-/* CONTROL - CORREGIDO */
+/* CONTROL - CORREGIDO (Muestra a todos los clientes) */
 function vControl(){
   var t=UI.ctype;
   if(!UI.cper) UI.cper = defaultPeriod(t);
   var k=UI.cper;
   
   var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl); });
+  
+  // Separar por estados
   var vencidos = allRows.filter(function(r){ return r.total > 0 && !r.complete && r.overdue; });
   var porVencer = allRows.filter(function(r){ return r.total > 0 && !r.complete && !r.overdue; });
   var completados = allRows.filter(function(r){ return r.total > 0 && r.complete; });
@@ -476,7 +478,6 @@ function vControl(){
   var opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
   var renderTable = function(list){
-    if(!list.length) return '';
     return '<div class="tablewrap"><table>'+
       '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones ('+TIPOLBL[t]+')</th></tr></thead>'+
       '<tbody>'+list.map(function(r){
@@ -499,12 +500,13 @@ function vControl(){
     grpSelect()+ searchInput('q_ctrl', UI.q_ctrl)+
   '</div>'+
   '<div class="card" style="border-left:4px solid var(--bad)"><b style="color:var(--bad)">🚨 Vencidas ('+vencidos.length+')</b>'+
-    (vencidos.length ? renderTable(vencidos) : '<div class="empty">Sin vencidos.</div>')+'</div>'+
+    (vencidos.length ? renderTable(vencidos) : '<div class="empty">Sin vencidos en este período.</div>')+'</div>'+
   '<div class="card" style="border-left:4px solid var(--pri)"><b style="color:var(--pri)">⏳ Próximas / En plazo ('+porVencer.length+')</b>'+
-    (porVencer.length ? renderTable(porVencer) : '<div class="empty">Sin pendientes.</div>')+'</div>'+
+    (porVencer.length ? renderTable(porVencer) : '<div class="empty">Sin pendientes en este período.</div>')+'</div>'+
   '<div class="card" style="border-left:4px solid var(--ok)"><b style="color:var(--ok)">✓ Completadas ('+completados.length+')</b>'+
     (completados.length ? renderTable(completados) : '<div class="empty">Aún no hay completadas.</div>')+'</div>'+
-  (sinObligaciones.length ? '<div class="card"><b>ℹ️ Sin obligaciones ('+sinObligaciones.length+')</b>'+renderTable(sinObligaciones)+'</div>' : '');
+  '<div class="card"><b>ℹ️ Clientes sin obligaciones ('+sinObligaciones.length+')</b>'+
+    (sinObligaciones.length ? renderTable(sinObligaciones) : '<div class="empty">Todos los clientes activos tienen obligaciones asignadas.</div>')+'</div>';
 }
 
 /* ANUAL - CON ORDENAMIENTO */
@@ -534,12 +536,11 @@ function vAnual(){
     return {c:c, cells:cells, tot:act.length, ok:doneCells, bad:act.filter(function(x){return x.s==='bad';}).length, pend:act.filter(function(x){return x.s!=='ok'&&x.s!=='na';}).length, pct: act.length ? doneCells/act.length : 0, ruc9: digito9(c.ruc)};
   });
 
-  // ORDENAMIENTO
   var ord = UI.ordenAnual;
   rows.sort(function(a,b){
     if(ord === 'alfabetico') return a.c.nombre.localeCompare(b.c.nombre,'es');
     if(ord === 'ruc') return a.ruc9 - b.ruc9;
-    if(ord === 'pendientes') return a.pct - b.pct; // los de menor cumplimiento primero
+    if(ord === 'pendientes') return a.pct - b.pct;
     return 0;
   });
 
@@ -549,8 +550,8 @@ function vAnual(){
     '<button class="btn" data-a="ayShift" data-dir="1">▶</button>'+
     '<select data-f="ordenAnual">'+
       '<option value="alfabetico" '+(ord==='alfabetico'?'selected':'')+'>Orden Alfabético</option>'+
-      '<option value="ruc" '+(ord==='ruc'?'selected':'')+'>Orden por 9.º dígito RUC (Fecha declaración)</option>'+
-      '<option value="pendientes" '+(ord==='pendientes'?'selected':'')+'>Orden por Pendientes (menor cumplimiento)</option>'+
+      '<option value="ruc" '+(ord==='ruc'?'selected':'')+'>Orden por 9.º dígito RUC</option>'+
+      '<option value="pendientes" '+(ord==='pendientes'?'selected':'')+'>Orden por Pendientes</option>'+
     '</select>'+
     grpSelect()+ searchInput('q_anual', UI.q_anual)+
   '</div>'+
