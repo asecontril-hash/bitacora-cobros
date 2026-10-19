@@ -98,7 +98,17 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 #print-area { display: none; }
 
+@page {
+  size: A4 portrait;
+  margin: 5mm;
+}
+
 @media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
   body * { visibility: hidden !important; }
   #print-area, #print-area * {
     visibility: visible !important;
@@ -119,9 +129,9 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
   #print-area .print-card {
     box-sizing: border-box !important;
     border: 2px solid #0f6b6b !important;
-    padding: 18px !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    padding: 15px !important;
+    width: 98% !important;
+    max-width: 98% !important;
     margin: 0 auto !important;
     background: #fff !important;
     color: #000 !important;
@@ -133,14 +143,12 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     border-collapse: collapse !important;
     margin-bottom: 15px !important;
   }
-  #print-area tr {
-    display: table-row !important;
-  }
+  #print-area tr { display: table-row !important; }
   #print-area th, #print-area td {
     display: table-cell !important;
     border: 1px solid #000 !important;
-    padding: 6px 8px !important;
-    font-size: 13px !important;
+    padding: 5px 6px !important;
+    font-size: 12px !important;
     color: #000 !important;
     word-wrap: break-word !important;
   }
@@ -1137,10 +1145,32 @@ function modalAnDist(cid, y, mNum){
   var aItemsInMonth = oblFor(c, 'A').filter(function(o){ return oblMonthIndex(c, o.k) === mNum; });
   var aAv = avanceOf(cid, String(y));
 
+  var doneNames = [];
+
+  mItems.forEach(function(o){
+    if (mAv.done && mAv.done[o.k]) doneNames.push(o.n);
+  });
+  sItemsInMonth.forEach(function(o){
+    var isS1 = (o.m === 7 || o.k.includes('SEM1'));
+    var targetAv = isS1 ? sAv1 : sAv2;
+    if (targetAv.done && targetAv.done[o.k]) doneNames.push(o.n);
+  });
+  aItemsInMonth.forEach(function(o){
+    if (aAv.done && aAv.done[o.k]) doneNames.push(o.n);
+  });
+
+  if (doneNames.length === 0) {
+    mItems.forEach(function(o){ doneNames.push(o.n); });
+    sItemsInMonth.forEach(function(o){ doneNames.push(o.n); });
+    aItemsInMonth.forEach(function(o){ doneNames.push(o.n); });
+  }
+
+  var detalleObls = doneNames.length ? doneNames.join(', ') : 'Declaración';
+  var conceptoAuto = 'Honorarios / ' + detalleObls + ' - ' + MESES[mNum-1] + ' ' + y;
+
   var ultimoDiaMes = new Date(y, mNum, 0);
   var fechaSugeridaStr = ymd(ultimoDiaMes);
-  var conceptoMes = 'Honorarios / Declaración ' + MESES[mNum-1] + ' ' + y;
-  var yaExiste = existeCobro(cid, conceptoMes);
+  var yaExiste = existeCobro(cid, conceptoAuto);
 
   openModal('<h2>'+esc(c.nombre)+' · '+MESES[mNum-1]+' '+y+'</h2>'+
   (mItems.length?'<b>Mensuales ('+mKey+'):</b><div class="obs" style="margin:6px 0 12px">'+mItems.map(function(o){ return '<button class="ob '+(mAv.done&&mAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+mKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
@@ -1156,7 +1186,7 @@ function modalAnDist(cid, y, mNum){
     (c.cobra !== false ? 
       (yaExiste ? 
         '<span class="chip ok">✓ Cuenta de este mes ya generada</span>' : 
-        '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-m="'+MESES[mNum-1]+' '+y+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>'
+        '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-con="'+esc(conceptoAuto)+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>'
       ) : '<span></span>')+
     '<button class="btn" data-a="close">Listo</button>'+
   '</div>');
@@ -1170,44 +1200,44 @@ function imprimirReciboCobro(id){
   var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
 
   var html = '<div class="print-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px">'+
         '<div>'+
-          '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
-          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
+          '<h1 style="margin:0;font-size:22px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
-          '<div style="font-size:12px;color:#000">Fecha de Cobro: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div>'+
+          '<div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div>'+
+          '<div style="font-size:11px;color:#000">Fecha de Cobro: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div>'+
         '</div>'+
       '</div>'+
-      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
-        '<tr><td style="padding:3px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0;border:none"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
-        '<tr><td style="padding:3px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:3px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr>'+
+      '<table style="width:100%;margin-bottom:12px;font-size:12px;border:none">'+
+        '<tr><td style="padding:2px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+        '<tr><td style="padding:2px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:2px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr>'+
       '</table>'+
-      '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">RECIBO</div>'+
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
+      '<div style="font-weight:bold;font-size:13px;margin-bottom:4px">RECIBO</div>'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:15px;font-size:12px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
-            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:60%;border:1px solid #000;padding:5px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           '<tr>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(x.concepto)+'</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.pagado)+'</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:left">'+esc(x.concepto)+'</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(calc.pagado)+'</td>'+
           '</tr>'+
           '<tr style="font-weight:bold">'+
-            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:left">TOTAL PAGADO</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.pagado)+'</td>'+
+            '<td colspan="2" style="border:1px solid #000;padding:5px;text-align:left">TOTAL PAGADO</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(calc.pagado)+'</td>'+
           '</tr>'+
         '</tbody>'+
       '</table>'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:50px">'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
 
@@ -1221,46 +1251,46 @@ function imprimirEstadoCuenta(cid){
   var totalSaldo = pends.reduce(function(s, x){ return s + cobroCalc(x).saldo; }, 0);
 
   var html = '<div class="print-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px">'+
         '<div>'+
-          '<h1 style="margin:0;font-size:26px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
-          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
+          '<h1 style="margin:0;font-size:22px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:14px;font-weight:bold;color:#000">ESTADO DE CUENTA</div>'+
-          '<div style="font-size:12px;color:#000">Fecha de emisión: '+fmtD(new Date())+'</div>'+
+          '<div style="font-size:13px;font-weight:bold;color:#000">ESTADO DE CUENTA</div>'+
+          '<div style="font-size:11px;color:#000">Fecha de emisión: '+fmtD(new Date())+'</div>'+
         '</div>'+
       '</div>'+
-      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
-        '<tr><td style="padding:3px 0;border:none"><strong>RAZÓN SOCIAL:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0;border:none"><strong>RUC / C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+      '<table style="width:100%;margin-bottom:12px;font-size:12px;border:none">'+
+        '<tr><td style="padding:2px 0;border:none"><strong>RAZÓN SOCIAL:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC / C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
       '</table>'+
-      '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">ESTADO DE CUENTA</div>'+
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
+      '<div style="font-weight:bold;font-size:13px;margin-bottom:4px">ESTADO DE CUENTA</div>'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:15px;font-size:12px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
-            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:60%;border:1px solid #000;padding:5px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           pends.map(function(x){
             var calc = cobroCalc(x);
             return '<tr>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(x.concepto)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(calc.saldo)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:center">'+fmtDate(x.fechaEmision)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:left">'+esc(x.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(calc.saldo)+'</td>'+
             '</tr>';
           }).join('')+
           '<tr style="font-weight:bold">'+
-            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:left">TOTAL A CANCELAR</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(totalSaldo)+'</td>'+
+            '<td colspan="2" style="border:1px solid #000;padding:5px;text-align:left">TOTAL A CANCELAR</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(totalSaldo)+'</td>'+
           '</tr>'+
         '</tbody>'+
       '</table>'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:50px">'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Asesoría Contable y Tributaria</div>'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Conforme Cliente</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Asesoría Contable y Tributaria</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Conforme Cliente</div>'+
       '</div>'+
     '</div>';
 
@@ -1273,46 +1303,46 @@ function imprimirReciboMultiple(rid){
   var c = S.clientes[r.clienteId] || {nombre:'Cliente General', ruc:'N/A'};
 
   var html = '<div class="print-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:10px;margin-bottom:15px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px">'+
         '<div>'+
-          '<h1 style="margin:0;font-size:24px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
-          '<div style="font-size:12px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
+          '<h1 style="margin:0;font-size:22px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1>'+
+          '<div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable y Tributaria</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:13px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div>'+
-          '<div style="font-size:12px;color:#000">Fecha de Cobro: '+fmtDate(r.fecha)+'</div>'+
+          '<div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div>'+
+          '<div style="font-size:11px;color:#000">Fecha de Cobro: '+fmtDate(r.fecha)+'</div>'+
         '</div>'+
       '</div>'+
-      '<table style="width:100%;margin-bottom:15px;font-size:13px;border:none">'+
-        '<tr><td style="padding:3px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:3px 0;border:none"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
-        '<tr><td style="padding:3px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:3px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(r.referencia||'N/A')+'</td></tr>'+
+      '<table style="width:100%;margin-bottom:12px;font-size:12px;border:none">'+
+        '<tr><td style="padding:2px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC/C.I.:</strong> '+esc(c.ruc)+'</td></tr>'+
+        '<tr><td style="padding:2px 0;border:none"><strong>FORMA DE PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:2px 0;border:none"><strong>N.° REF / BANCO:</strong> '+esc(r.referencia||'N/A')+'</td></tr>'+
       '</table>'+
-      '<div style="font-weight:bold;font-size:14px;margin-bottom:5px">RECIBO</div>'+
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:20px;font-size:13px">'+
+      '<div style="font-weight:bold;font-size:13px;margin-bottom:4px">RECIBO</div>'+
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:15px;font-size:12px">'+
         '<thead>'+
           '<tr>'+
-            '<th style="width:22%;border:1px solid #000;padding:6px;text-align:center">FECHA DE EMISIÓN</th>'+
-            '<th style="width:58%;border:1px solid #000;padding:6px;text-align:center">CONCEPTO</th>'+
-            '<th style="width:20%;border:1px solid #000;padding:6px;text-align:center">VALOR</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">FECHA DE EMISIÓN</th>'+
+            '<th style="width:60%;border:1px solid #000;padding:5px;text-align:center">CONCEPTO</th>'+
+            '<th style="width:20%;border:1px solid #000;padding:5px;text-align:center">VALOR</th>'+
           '</tr>'+
         '</thead>'+
         '<tbody>'+
           r.detalles.map(function(d){
             return '<tr>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:center">'+fmtDate(r.fecha)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:left">'+esc(d.concepto)+'</td>'+
-              '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(d.monto)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:center">'+fmtDate(r.fecha)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:left">'+esc(d.concepto)+'</td>'+
+              '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(d.monto)+'</td>'+
             '</tr>';
           }).join('')+
           '<tr style="font-weight:bold">'+
-            '<td colspan="2" style="border:1px solid #000;padding:6px;text-align:left">TOTAL PAGADO</td>'+
-            '<td style="border:1px solid #000;padding:6px;text-align:right">'+money(r.montoTotal)+'</td>'+
+            '<td colspan="2" style="border:1px solid #000;padding:5px;text-align:left">TOTAL PAGADO</td>'+
+            '<td style="border:1px solid #000;padding:5px;text-align:right">'+money(r.montoTotal)+'</td>'+
           '</tr>'+
         '</tbody>'+
       '</table>'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:50px">'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
-        '<div style="text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div>'+
+        '<div style="text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px">Recibí Conforme</div>'+
       '</div>'+
     '</div>';
 
@@ -1362,7 +1392,7 @@ var ACT={
     }
   },
   nuevoCobro:function(){ modalCobro(null, '', ''); },
-  crearCobroDesdeModal:function(d){ modalCobro(d.c, 'Honorarios / Declaración '+d.m, d.fec); },
+  crearCobroDesdeModal:function(d){ modalCobro(d.c, d.con, d.fec); },
   saveCobro:async function(){
     var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
     if(!clienteId||!concepto||!monto){toast('Completa cliente, concepto y monto');return;}
