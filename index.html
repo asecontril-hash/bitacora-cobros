@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Bitácora de clientes y cobros · ASECONTRIL</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📒</text></svg>">
 <style>
 :root{
   box-sizing:border-box;
@@ -54,6 +55,7 @@ button.btn:hover{border-color:var(--pri)}
 button.btn.pri{background:var(--pri);color:var(--pri-ink);border-color:var(--pri)}
 button.btn.sm{padding:4px 9px;font-size:13px}
 button.btn.danger{color:var(--bad)}
+button.btn.info{background:var(--info-soft);color:var(--info);border-color:transparent}
 button.btn:disabled{opacity:.5;cursor:default}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--card);color:var(--mut);padding:8px 12px;font:inherit;font-weight:600;cursor:pointer}
@@ -100,7 +102,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 @page {
   size: A4 portrait;
-  margin: 0;
+  margin: 10mm;
 }
 
 @media print {
@@ -109,6 +111,8 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     padding: 0 !important;
     background: #fff !important;
     width: 100% !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   body * { visibility: hidden !important; }
   #print-area, #print-area * {
@@ -121,7 +125,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    padding: 8mm !important;
+    padding: 0 !important;
     margin: 0 !important;
     font-family: Arial, Helvetica, sans-serif !important;
   }
@@ -154,6 +158,8 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
     font-size: 11px !important;
     color: #000 !important;
     word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
   }
