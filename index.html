@@ -228,13 +228,26 @@ function fmtDate(s){ if(!s)return''; var p=s.split('-'); return p[2]+'/'+p[1]+'/
 function fmtD(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
 function toast(msg){ var t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(function(){t.remove();},3200); }
 
-function ptype(k){ return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'; }
+// ✅ CORRECCIÓN DEL ERROR DE plabel (undefined)
+function ptype(k){ 
+  if (!k) return 'A';
+  return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'; 
+}
 function plabel(k){
+  if(!k) return 'Período';
   var t=ptype(k);
-  if(t==='M'){ var p=k.split('-'); return MESES[+p[1]-1][0].toUpperCase()+MESES[+p[1]-1].slice(1)+' '+p[0]; }
-  if(t==='S'){ var p2=k.split('-'); return (p2[1]==='S1'?'1.er semestre ':'2.o semestre ')+p2[0]; }
+  if(t==='M'){ 
+    var p=k.split('-'); 
+    if(p.length > 1 && p[1]) return MESES[+p[1]-1][0].toUpperCase()+MESES[+p[1]-1].slice(1)+' '+p[0]; 
+    return k;
+  }
+  if(t==='S'){ 
+    var p2=k.split('-'); 
+    return (p2[1]==='S1'?'1.er semestre ':'2.o semestre ')+p2[0]; 
+  }
   return 'Año '+k;
 }
+
 function monthKey(y,m){ return y+'-'+pad(m); }
 function periodOptions(t){
   var y=now.getFullYear(),m=now.getMonth()+1,out=[];
@@ -250,7 +263,10 @@ function defaultPeriod(t){
   if(t==='S'){ return m>=7?y+'-S1':(y-1)+'-S2'; }
   return String(y-1);
 }
-function digito9(ruc){ return +String(ruc||'').replace(/\D/g,'')[8]; }
+function digito9(ruc){ 
+  var clean = String(ruc||'').replace(/\D/g,'');
+  return clean.length >= 9 ? +clean[8] : 0; 
+}
 function dueDate(c, k, oblKey){
   var digito = digito9(c.ruc);
   var diaRuc = DIA_POR_DIGITO[digito] || 28;
@@ -487,7 +503,7 @@ function vPanel(){
 
 /* CONTROL - CORREGIDO */
 function vControl(){
-  var t=UI.ctype;
+  var t=UI.ctype || 'M';
   if(!UI.cper) UI.cper = defaultPeriod(t);
   var k=UI.cper;
   
@@ -563,7 +579,12 @@ function vAnual(){
   var ord = UI.ordenAnual;
   rows.sort(function(a,b){
     if(ord === 'alfabetico') return a.c.nombre.localeCompare(b.c.nombre,'es');
-    if(ord === 'ruc') return a.ruc9 - b.ruc9;
+    // ✅ CORRECCIÓN: El "0" ahora se ordena correctamente al principio
+    if(ord === 'ruc') {
+      var rA = (a.ruc9 === 0) ? 10 : a.ruc9;
+      var rB = (b.ruc9 === 0) ? 10 : b.ruc9;
+      return rA - rB;
+    }
     if(ord === 'pendientes') return a.pct - b.pct;
     return 0;
   });
