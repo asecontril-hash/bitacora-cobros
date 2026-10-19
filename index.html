@@ -207,7 +207,7 @@ function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
 var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
 var loaded={};
 var now=new Date();
-var UI={ ay:new Date().getFullYear(), tab:'panel', ctype:'M', cper:null, q_cli:'', q_ctrl:'', q_anual:'', fgr:'todos', ordenAnual:'alfabetico' };
+var UI={ ay:new Date().getFullYear(), tab:'panel', ctype:'M', cper:null, q_cli:'', q_ctrl:'', q_anual:'', fgr:'todos', ordenAnual:'alfabetico', q_cobros:'', fgr_cobros:'todos' };
 
 function getOblList(){
   var dict = {};
@@ -309,6 +309,10 @@ function inGrp(c){ return UI.fgr==='todos'||(UI.fgr==='__sin'?!((c.grupo||'').tr
 function grpSelect(){
   return '<select data-f="fgr"><option value="todos">Todos los grupos</option><option value="__sin" '+(UI.fgr==='__sin'?'selected':'')+'>Sin grupo</option>'+
     gruposList().map(function(g){ return '<option value="'+esc(g)+'" '+(UI.fgr===g?'selected':'')+'>🏢 '+esc(g)+'</option>'; }).join('')+'</select>';
+}
+function grpSelectCobros(){
+  return '<select data-f="fgr_cobros"><option value="todos">Todos los grupos</option><option value="__sin" '+(UI.fgr_cobros==='__sin'?'selected':'')+'>Sin grupo</option>'+
+    gruposList().map(function(g){ return '<option value="'+esc(g)+'" '+(UI.fgr_cobros===g?'selected':'')+'>🏢 '+esc(g)+'</option>'; }).join('')+'</select>';
 }
 function searchInput(fieldKey, valStr){ return '<input type="text" id="src_'+fieldKey+'" placeholder="🔍 Buscar cliente, RUC o celular…" value="'+esc(valStr)+'" data-f="'+fieldKey+'" style="min-width:200px">'; }
 function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
@@ -504,7 +508,6 @@ function vPanel(){
 /* CONTROL - CORREGIDO CON PROTECCIÓN DE ERRORES */
 function vControl(){
   var t = UI.ctype || 'M';
-  // Asegurarse de que UI.cper sea válido
   if (!UI.cper || typeof UI.cper !== 'string') {
     UI.cper = defaultPeriod(t);
   }
@@ -659,17 +662,29 @@ function vClaves(){
 function vCobros(){
   var rawList = cobrosList().filter(function(x){ return !x.anulado; });
   var porCliente = {};
+  
   rawList.forEach(function(x){
-    var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:'', celular:''};
+    var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:'', celular:'', grupo:''};
+    
+    // ✅ FILTRO: Aplicar búsqueda por cliente y por grupo
+    var matchGrp = (UI.fgr_cobros === 'todos') || (UI.fgr_cobros === '__sin' ? !((c.grupo||'').trim()) : (c.grupo||'').trim() === UI.fgr_cobros);
+    if (!matchGrp || !matchesQ(c, UI.q_cobros)) return;
+
     var calc = cobroCalc(x);
     if(!porCliente[x.clienteId]) porCliente[x.clienteId] = {cliente: c, cid: x.clienteId, totalMonto: 0, totalSaldo: 0, pendientes: []};
     porCliente[x.clienteId].totalMonto += x.monto;
     porCliente[x.clienteId].totalSaldo += calc.saldo;
     porCliente[x.clienteId].pendientes.push({x: x, calc: calc});
   });
+  
   var clientesArray = Object.values(porCliente);
   var recsList = recibosList();
-  return '<div class="bar"><button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button></div>'+
+  
+  return '<div class="bar">'+
+    '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button>'+
+    grpSelectCobros()+
+    searchInput('q_cobros', UI.q_cobros)+
+  '</div>'+
   '<div class="card">'+
     '<b>📌 Cuentas por Cobrar por Cliente</b>'+
     (clientesArray.length ? clientesArray.map(function(group){
@@ -689,7 +704,7 @@ function vCobros(){
                 (item.x.reciboId ? '<button class="btn sm pri" data-a="imprimirReciboMult" data-rid="'+item.x.reciboId+'">🖨️ Recibo</button>' : '<button class="btn sm pri" data-a="imprimirRecibo" data-id="'+item.x.id+'">🖨️ Recibo</button>')+
                 ' <button class="btn sm danger" data-a="eliminarCobroIndividual" data-id="'+item.x.id+'">🗑️</button></td></tr>';
           }).join('')+'</tbody></table></div></div>';
-    }).join('') : '<div class="empty">No hay cuentas por cobrar.</div>')+
+    }).join('') : '<div class="empty">No hay cuentas por cobrar que coincidan.</div>')+
   '</div>'+
   (recsList.length ? '<div class="card" style="margin-top:14px"><b>📑 Historial de Recibos</b><div class="tablewrap"><table style="margin-top:8px;font-size:13px">'+
       '<thead><tr><th>N.° Recibo</th><th>Fecha</th><th>Cliente</th><th>Método</th><th>Referencia</th><th>Monto</th><th>Acciones</th></tr></thead>'+
@@ -1063,11 +1078,12 @@ var ACT={
 document.addEventListener('click',function(e){ var b=e.target.closest('[data-a]');if(!b)return; var fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e); });
 document.addEventListener('input',function(e){
   var t=e.target, f=t.dataset&&t.dataset.f; if(!f) return;
-  if(f==='q_cli' || f==='q_ctrl' || f==='q_anual'){
+  if(f==='q_cli' || f==='q_ctrl' || f==='q_anual' || f==='q_cobros'){
     UI[f] = t.value; var currentPos = t.selectionStart;
     if(UI.tab==='clientes') $('#main').innerHTML = vClientes();
     else if(UI.tab==='control') $('#main').innerHTML = vControl();
     else if(UI.tab==='anual') $('#main').innerHTML = vAnual();
+    else if(UI.tab==='cobros') $('#main').innerHTML = vCobros();
     var inputRef = $('#src_' + f); if(inputRef){ inputRef.focus(); inputRef.setSelectionRange(currentPos, currentPos); }
   }
 });
@@ -1075,6 +1091,7 @@ document.addEventListener('change',function(e){
   var t=e.target,f=t.dataset&&t.dataset.f;
   if(f==='cper'){UI.cper=t.value;render();}
   else if(f==='fgr'){UI.fgr=t.value;render();}
+  else if(f==='fgr_cobros'){UI.fgr_cobros=t.value;render();}
   else if(f==='ordenAnual'){UI.ordenAnual=t.value;render();}
   else if(f==='srv_sel'){ var txt=$('#vk_srv_txt'); if(txt) txt.style.display = t.value==='OTRO'?'block':'none'; }
   else if(f==='mc_cli_sel'){ var c = S.clientes[t.value]; if(c && c.tarifa){ var mon=$('#mc_mon'); if(mon) mon.value = c.tarifa; } }
