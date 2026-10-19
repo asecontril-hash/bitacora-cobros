@@ -361,7 +361,31 @@ var Store={
   put: async function(col,id,data){ data=clean(data); S[col][id]=data; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar'); } } else this.saveLocal(); },
   del: async function(col,id){ delete S[col][id]; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } } else this.saveLocal(); },
   clearCollection: async function(col){ S[col] = {}; render(); if(this.db){ try { var snap = await this.db.collection(col).get(); snap.docs.forEach(function(d){ d.ref.delete(); }); } catch(e){} } else this.saveLocal(); },
-  descargarRespaldo: function(){ var backupData = {}; COLS.forEach(function(c){ backupData[c] = S[c] || {}; }); var jsonStr = JSON.stringify(backupData, null, 2); var blob = new Blob([jsonStr], {type: "application/json"}); var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = url; a.download = "RESPALDO_BITACORA_ASECONTRIL_" + todayStr() + ".json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
+  descargarRespaldo: function(){ var backupData = {}; COLS.forEach(function(c){ backupData[c] = S[c] || {}; }); var jsonStr = JSON.stringify(backupData, null, 2); var blob = new Blob([jsonStr], {type: "application/json"}); var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = url; a.download = "RESPALDO_BITACORA_ASECONTRIL_" + todayStr() + ".json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
+  restaurarRespaldo: async function(jsonData){
+    try {
+      var data = JSON.parse(jsonData);
+      for (var i = 0; i < COLS.length; i++) {
+        var col = COLS[i];
+        if (data[col]) {
+          S[col] = data[col];
+          if (this.db) {
+            var snap = await this.db.collection(col).get();
+            var batch = this.db.batch();
+            snap.docs.forEach(function(d){ batch.delete(d.ref); });
+            await batch.commit();
+
+            var keys = Object.keys(data[col]);
+            for (var j = 0; j < keys.length; j++) {
+              await this.db.doc(col + '/' + keys[j]).set(data[col][keys[j]]);
+            }
+          }
+        }
+      }
+      this.saveLocal();
+      return true;
+    } catch(e) { console.error(e); return false; }
+  }
 };
 
 /* ============ CIFRADO Y BOVEDA ============ */
@@ -461,7 +485,7 @@ function vPanel(){
   '</div>';
 }
 
-/* CONTROL - CORREGIDO (Muestra a todos los clientes) */
+/* CONTROL - CORREGIDO */
 function vControl(){
   var t=UI.ctype;
   if(!UI.cper) UI.cper = defaultPeriod(t);
@@ -469,7 +493,6 @@ function vControl(){
   
   var allRows=rowsFor(t,k).filter(function(r){ return inGrp(r.c)&&matchesQ(r.c, UI.q_ctrl); });
   
-  // Separar por estados
   var vencidos = allRows.filter(function(r){ return r.total > 0 && !r.complete && r.overdue; });
   var porVencer = allRows.filter(function(r){ return r.total > 0 && !r.complete && !r.overdue; });
   var completados = allRows.filter(function(r){ return r.total > 0 && r.complete; });
@@ -478,6 +501,7 @@ function vControl(){
   var opts=periodOptions(t); if(!opts.includes(k))opts.unshift(k);
 
   var renderTable = function(list){
+    if(!list.length) return '';
     return '<div class="tablewrap"><table>'+
       '<thead><tr><th>Cliente</th><th>Vencimiento</th><th>Obligaciones ('+TIPOLBL[t]+')</th></tr></thead>'+
       '<tbody>'+list.map(function(r){
@@ -509,7 +533,7 @@ function vControl(){
     (sinObligaciones.length ? renderTable(sinObligaciones) : '<div class="empty">Todos los clientes activos tienen obligaciones asignadas.</div>')+'</div>';
 }
 
-/* ANUAL - CON ORDENAMIENTO */
+/* ANUAL - CON ORDENAMIENTO Y COLUMNA RUC */
 function cellInfoAnual(c, y, mNum) {
   var mKey = monthKey(y, mNum);
   var mItems = oblFor(c, 'M'); var mAv = avanceOf(c.id, mKey);
@@ -557,11 +581,12 @@ function vAnual(){
   '</div>'+
   '<div class="card">'+
     '<div class="sm" style="margin-bottom:8px"><span class="cl ok">✓</span> cumplido · <span class="cl bad">vencido</span> · <span class="cl pend">·</span> pendiente.</div>'+
-    (rows.length?'<div class="tablewrap"><table class="ym" style="min-width:1000px">'+
-      '<thead><tr><th>Cliente</th>'+MESES.map(function(m){ return '<th>'+m.slice(0,3)+'</th>'; }).join('')+'<th>% Cumplido</th></tr></thead>'+
+    (rows.length?'<div class="tablewrap"><table class="ym" style="min-width:1100px">'+
+      '<thead><tr><th>Cliente</th><th>9.º Díg.</th>'+MESES.map(function(m){ return '<th>'+m.slice(0,3)+'</th>'; }).join('')+'<th>% Cumplido</th></tr></thead>'+
       '<tbody>'+rows.map(function(r){
         return '<tr>'+
           '<td><div class="nm">'+esc(r.c.nombre)+'</div></td>'+
+          '<td><span class="chip info">'+r.ruc9+'</span></td>'+
           r.cells.map(function(x,idx){
             if(x.s==='na')return '<td><span class="cl na">–</span></td>';
             var txt=x.s==='ok'?'✓':x.s==='bad'?x.done+'/'+x.total:'·';
@@ -676,6 +701,8 @@ function vAjustes(){
   '<div class="card" style="max-width:600px;border-left:4px solid var(--bad)"><b style="color:var(--bad)">⚠️ Mantenimiento</b>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
       '<button class="btn info" data-a="descargarRespaldoManual">📥 Descargar Respaldo</button>'+
+      '<button class="btn pri" data-a="abrirModalRestaurar">📤 Restaurar Respaldo (JSON)</button>'+
+      '<button class="btn pri" data-a="abrirModalImportarExcel">📊 Importar Clientes (Excel/CSV)</button>'+
       '<button class="btn danger" data-a="borrarTodasCuentas">🗑️ Borrar Cuentas y Recibos</button>'+
       '<button class="btn danger" data-a="restablecerSistemaCompleto">🚨 Restablecer Todo</button></div></div>';
 }
@@ -811,6 +838,22 @@ function modalAnDist(cid, y, mNum){
     '<button class="btn" data-a="close">Listo</button></div>');
 }
 
+/* ============ NUEVOS MODALES: RESTAURAR Y EXCEL ============ */
+function modalRestaurar(){
+  openModal('<h2>📤 Restaurar Respaldo</h2>'+
+    '<p class="sm">Selecciona un archivo JSON de respaldo generado previamente. <b>Esto sobrescribirá todos los datos actuales.</b></p>'+
+    '<div class="fgrid"><div class="full"><label>Archivo JSON<input type="file" id="file_restore" accept=".json"></label></div></div>'+
+    '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn danger" data-a="ejecutarRestaurar">Restaurar Ahora</button></div>');
+}
+
+function modalImportarExcel(){
+  openModal('<h2>📊 Importar Clientes desde Excel</h2>'+
+    '<p class="sm">Sube un archivo CSV (separado por comas o punto y coma) con las columnas: <b>Nombre, RUC, Celular, Grupo, Tarifa</b>.</p>'+
+    '<p class="sm" style="font-size:11px">Puedes exportar tu Excel como CSV para que sea compatible.</p>'+
+    '<div class="fgrid"><div class="full"><label>Archivo CSV<input type="file" id="file_excel" accept=".csv,text/csv"></label></div></div>'+
+    '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="ejecutarImportarExcel">Importar Clientes</button></div>');
+}
+
 /* ============ IMPRESIÓN ============ */
 function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return; var c = S.clientes[x.clienteId] || {nombre:'Cliente', ruc:'N/A'}; var calc = cobroCalc(x);
@@ -922,6 +965,48 @@ var ACT={
   },
   eliminarCobroIndividual:async function(d){ if(confirm('¿Eliminar cuenta?')){ await Store.del('cobros', d.id); toast('Eliminado'); } },
   descargarRespaldoManual:function(){ Store.descargarRespaldo(); toast('Respaldo descargado'); },
+  abrirModalRestaurar:function(){ modalRestaurar(); },
+  ejecutarRestaurar:function(){
+    var fileInput = document.getElementById('file_restore');
+    if(!fileInput.files.length){ toast('Selecciona un archivo JSON primero'); return; }
+    var file = fileInput.files[0];
+    var reader = new FileReader();
+    reader.onload = async function(e){
+      var ok = await Store.restaurarRespaldo(e.target.result);
+      if(ok){ toast('Respaldo restaurado correctamente'); closeModal(); setTimeout(function(){ location.reload(); }, 800); }
+      else { toast('Error al restaurar respaldo'); }
+    };
+    reader.readAsText(file);
+  },
+  abrirModalImportarExcel:function(){ modalImportarExcel(); },
+  ejecutarImportarExcel:function(){
+    var fileInput = document.getElementById('file_excel');
+    if(!fileInput.files.length){ toast('Selecciona un archivo CSV primero'); return; }
+    var file = fileInput.files[0];
+    var reader = new FileReader();
+    reader.onload = async function(e){
+      try {
+        var text = e.target.result;
+        var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+        var count = 0;
+        for (var i = 1; i < lines.length; i++) {
+          var parts = lines[i].split(/[;,]/).map(function(s){ return s.trim(); });
+          if (parts.length >= 2 && parts[0]) {
+            var nombre = parts[0];
+            var ruc = parts[1] || '';
+            var cel = parts[2] || '';
+            var grupo = parts[3] || '';
+            var tarifa = parseFloat(parts[4]) || 0;
+            var id = 'c' + ruc.replace(/\D/g,'');
+            await Store.put('clientes', id, {nombre: nombre, ruc: ruc, celular: cel, grupo: grupo, tarifa: tarifa, tipo: 'PERSONA NATURAL', cobra: true, doc: 'recibo', cobroFreq: 'M', obl: {}, activo: true});
+            count++;
+          }
+        }
+        closeModal(); toast('✅ ' + count + ' clientes importados correctamente');
+      } catch(err) { toast('Error al importar: ' + err.message); }
+    };
+    reader.readAsText(file);
+  },
   borrarTodasCuentas:async function(){ if(confirm('¿Borrar TODAS las cuentas por cobrar y recibos?\n\nSe descargará un respaldo automático.')){ Store.descargarRespaldo(); await Store.clearCollection('cobros'); await Store.clearCollection('recibos'); toast('Restablecido'); } },
   restablecerSistemaCompleto:async function(){ if(confirm('🚨 ¡ATENCIÓN! ¿Restablecer TODO el sistema?\n\nSe descargará un respaldo automático.')){ Store.descargarRespaldo(); for(var i=0; i<COLS.length; i++){ await Store.clearCollection(COLS[i]); } toast('Restablecido'); setTimeout(function(){ location.reload(); }, 1500); } },
   imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
