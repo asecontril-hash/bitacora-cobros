@@ -766,10 +766,11 @@ function vCobros(){
   '<div class="card">'+
     '<b>📌 Estado de Cuentas por Cobrar Agrupadas por Cliente (ASECONTRIL)</b>'+
     (clientesArray.length ? clientesArray.map(function(group){
+      var celTxt = group.cliente.celular ? '📱 ' + esc(group.cliente.celular) : '<span style="color:var(--bad)">Sin celular</span>';
       return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;background:var(--card)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px">'+
           '<div>'+
-            '<b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+' · 📱 '+(esc(group.cliente.celular)||<span style="color:var(--bad)">Sin celular</span>)+')</span>'+
+            '<b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+' · '+celTxt+')</span>'+
           '</div>'+
           '<div>'+
             '<span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> '+
@@ -919,9 +920,10 @@ function modalNotifCobro(cid){
   else if (cleanNum.length === 10 && cleanNum.startsWith('09')) cleanNum = '593' + cleanNum.slice(1);
 
   var wspUrl = cleanNum ? 'https://wa.me/' + cleanNum + '?text=' + encodeURIComponent(msg) : '';
+  var celHeader = c.celular ? esc(c.celular) : 'Sin teléfono registrado';
 
   openModal('<h2>📱 Enviar Notificación de Cobro · ASECONTRIL</h2>'+
-  '<p class="sm">Cliente: <b>'+esc(c.nombre)+'</b> | Celular: <b>'+(esc(c.celular)||<span style="color:var(--bad)">Sin teléfono registrado</span>)+'</b></p>'+
+  '<p class="sm">Cliente: <b>'+esc(c.nombre)+'</b> | Celular: <b>'+celHeader+'</b></p>'+
   '<textarea id="txt_notif_wsp" style="height:220px;font-family:monospace;font-size:13px">'+esc(msg)+'</textarea>'+
   '<div class="actions">'+
     '<button class="btn" data-a="close">Cerrar</button>'+
