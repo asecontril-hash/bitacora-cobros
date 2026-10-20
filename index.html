@@ -147,19 +147,24 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
   let db = null;
-  try {
-    const firebaseConfig = {
-      apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
-      authDomain: "bitacora-cobros.firebaseapp.com",
-      projectId: "bitacora-cobros",
-      storageBucket: "bitacora-cobros.firebasestorage.app",
-      messagingSenderId: "465013215619",
-      appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
-    };
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-  } catch(e) { console.warn("Firebase no disponible:", e); }
-  window.claude = { use: async (service) => (service === 'db' && db) ? db : null };
+  // ✅ FIX: se inicializa Firebase al cargar la ventana, por si el SDK aún no está listo
+  window.addEventListener('load', function(){
+    try {
+      if (typeof firebase === 'undefined') throw new Error('SDK Firebase no cargó');
+      const firebaseConfig = {
+        apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
+        authDomain: "bitacora-cobros.firebaseapp.com",
+        projectId: "bitacora-cobros",
+        storageBucket: "bitacora-cobros.firebasestorage.app",
+        messagingSenderId: "465013215619",
+        appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
+      };
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+    } catch(e) { console.warn("Firebase no disponible:", e && e.stack ? e.stack : e); }
+  });
+  // ✅ FIX: se expone el accessor para que Store.init lo encuentre siempre
+  window.AppDB = { use: async () => db };
 </script>
 </head>
 <body>
@@ -228,30 +233,43 @@ function fmtDate(s){ if(!s)return''; var p=s.split('-'); return p[2]+'/'+p[1]+'/
 function fmtD(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
 function toast(msg){ var t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(function(){t.remove();},3200); }
 
-// ✅ CORRECCIÓN DEL ERROR DE plabel (undefined)
-function ptype(k){ 
+// ✅ FIX: ptype valida meses 01..12 y rechaza basura
+function ptype(k){
   if (!k || typeof k !== 'string') return 'A';
-  return /^\d{4}-\d\d$/.test(k)?'M':/^\d{4}-S\d$/.test(k)?'S':'A'; 
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(k)) return 'M';
+  if (/^\d{4}-S[12]$/.test(k)) return 'S';
+  if (/^\d{4}$/.test(k)) return 'A';
+  return 'A';
 }
+// ✅ FIX: plabel protege contra índices inválidos (evita undefined[0])
 function plabel(k){
   if(!k) return 'Período Actual';
   var t=ptype(k);
-  if(t==='M'){ 
-    var p=k.split('-'); 
-    if(p.length > 1 && p[1]) return MESES[+p[1]-1][0].toUpperCase()+MESES[+p[1]-1].slice(1)+' '+p[0]; 
+  if(t==='M'){
+    var p=k.split('-');
+    var mi = (+p[1]) - 1;
+    if(p.length > 1 && MESES[mi]) return MESES[mi][0].toUpperCase()+MESES[mi].slice(1)+' '+p[0];
     return String(k);
   }
-  if(t==='S'){ 
-    var p2=k.split('-'); 
-    return (p2[1]==='S1'?'1.er semestre ':'2.o semestre ')+p2[0]; 
+  if(t==='S'){
+    var p2=k.split('-');
+    return (p2[1]==='S1'?'1.er semestre ':'2.o semestre ')+p2[0];
   }
   return 'Año '+k;
 }
+// ✅ FIX: helper para obtener mes numérico desde una clave de período
+function mNumFromKey(k){
+  if (typeof k !== 'string') return 1;
+  if (/^\d{4}-\d\d$/.test(k)) return +k.split('-')[1] || 1;
+  if (/^\d{4}-S\d$/.test(k))  return k.endsWith('S1') ? 7 : 1;
+  return 1;
+}
 
 function monthKey(y,m){ return y+'-'+pad(m); }
+// ✅ FIX: maxM acotado a 12 (antes generaba "2026-13".."2026-15" en oct-dic → rompía plabel)
 function periodOptions(t){
   var y=now.getFullYear(),m=now.getMonth()+1,out=[];
-  if(t==='M'){ for(var yy=y; yy>=2026; yy--){ var maxM = (yy===y)? m+3 : 12; for(var mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm)); } }
+  if(t==='M'){ for(var yy=y; yy>=2026; yy--){ var maxM = (yy===y)? Math.min(m+3,12) : 12; for(var mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm)); } }
   if(t==='S'){ for(var yy2=y+1; yy2>=2026; yy2--){ out.push(yy2+'-S2'); out.push(yy2+'-S1'); } }
   if(t==='A'){ for(var yy3=y+1; yy3>=2026; yy3--) out.push(String(yy3)); }
   return out.length ? out : [t==='M'?'2026-01':t==='S'?'2026-S1':'2026'];
@@ -263,9 +281,9 @@ function defaultPeriod(t){
   if(t==='S'){ return m>=7?y+'-S1':(y-1)+'-S2'; }
   return String(y-1);
 }
-function digito9(ruc){ 
+function digito9(ruc){
   var clean = String(ruc||'').replace(/\D/g,'');
-  return clean.length >= 9 ? +clean[8] : 0; 
+  return clean.length >= 9 ? +clean[8] : 0;
 }
 function dueDate(c, k, oblKey){
   var digito = digito9(c.ruc);
@@ -288,7 +306,8 @@ function oblMonthIndex(c, oblKey){
   if(oblKey==='IM_RTA') return c.tipo==='SOCIEDAD'?4:3;
   if(oblKey==='PM') return (c.tipo==='SOCIEDAD'||c.contabilidad)?6:7;
   var target=getOblList().find(function(o){ return o.k===oblKey; });
-  return target&&target.m?target.m:1;
+  // ✅ FIX: si m es 0 o no existe, devolver 1 para no perder la obligación del anual
+  return target&&typeof target.m==='number'&&target.m>0?target.m:1;
 }
 function daysTo(d){ return Math.round((d-midnight())/864e5); }
 function matchesQ(c, qTerm){
@@ -296,7 +315,7 @@ function matchesQ(c, qTerm){
   var q=qTerm.toLowerCase().trim();
   return (c.nombre||'').toLowerCase().includes(q)||(c.ruc||'').includes(q)||(c.celular||'').includes(q)||(c.grupo||'').toLowerCase().includes(q);
 }
-function clientesList(){ return Object.entries(S.clientes).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre,'es'); }); }
+function clientesList(){ return Object.entries(S.clientes).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||'','es'); }); }
 function gruposList(){ var set=new Set(clientesList().map(function(c){ return (c.grupo||'').trim(); }).filter(Boolean)); return Array.from(set).sort(function(a,b){ return a.localeCompare(b,'es'); }); }
 function tagsCli(c){
   return (c.activo===false?'<span class="chip warn">⏸ Suspendido</span> ':'')+
@@ -359,13 +378,13 @@ var COLS=['clientes','cobros','recibos','avances','config','boveda','catObl'];
 var Store={
   db:null,
   init: async function(){
-    var db=null;
-    try{ if(window.claude&&window.claude.use) db=await window.claude.use('db'); }catch(e){ db=null; }
+    var dbConn=null;
+    try{ if(window.AppDB&&window.AppDB.use) dbConn=await window.AppDB.use('db'); }catch(e){ dbConn=null; }
     setTimeout(function(){ if(!S.ready){ S.ready=true; render(); } }, 800);
-    if(db){
-      this.db=db; S.kind='nube';
+    if(dbConn){
+      this.db=dbConn; S.kind='nube';
       COLS.forEach(function(col){
-        db.collection(col).onSnapshot(function(snap){
+        dbConn.collection(col).onSnapshot(function(snap){
           var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
           S[col]=o; loaded[col]=true;
           if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
@@ -380,7 +399,19 @@ var Store={
   saveLocal: function(){ try{ var obj={}; COLS.forEach(function(c){ obj[c]=S[c]; }); localStorage.setItem('bitacora_v1', JSON.stringify(obj)); }catch(e){} },
   put: async function(col,id,data){ data=clean(data); S[col][id]=data; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar'); } } else this.saveLocal(); },
   del: async function(col,id){ delete S[col][id]; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } } else this.saveLocal(); },
-  clearCollection: async function(col){ S[col] = {}; render(); if(this.db){ try { var snap = await this.db.collection(col).get(); snap.docs.forEach(function(d){ d.ref.delete(); }); } catch(e){} } else this.saveLocal(); },
+  // ✅ FIX: ahora usa batch y espera el commit
+  clearCollection: async function(col){
+    S[col] = {}; render();
+    if(this.db){
+      try {
+        var snap = await this.db.collection(col).get();
+        if (snap.empty) return;
+        var batch = this.db.batch();
+        snap.docs.forEach(function(d){ batch.delete(d.ref); });
+        await batch.commit();
+      } catch(e){ console.warn('clearCollection error:', e); }
+    } else this.saveLocal();
+  },
   descargarRespaldo: function(){ var backupData = {}; COLS.forEach(function(c){ backupData[c] = S[c] || {}; }); var jsonStr = JSON.stringify(backupData, null, 2); var blob = new Blob([jsonStr], {type: "application/json"}); var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href = url; a.download = "RESPALDO_BITACORA_ASECONTRIL_" + todayStr() + ".json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
   restaurarRespaldo: async function(jsonData){
     try {
@@ -505,14 +536,14 @@ function vPanel(){
   '</div>';
 }
 
-/* CONTROL - CORREGIDO CON PROTECCIÓN DE ERRORES */
+/* CONTROL */
 function vControl(){
   var t = UI.ctype || 'M';
   if (!UI.cper || typeof UI.cper !== 'string') {
     UI.cper = defaultPeriod(t);
   }
   var k = UI.cper;
-  
+
   var allRows = [];
   try {
     allRows = rowsFor(t, k).filter(function(r){ return inGrp(r.c) && matchesQ(r.c, UI.q_ctrl); });
@@ -523,7 +554,7 @@ function vControl(){
   var completados = allRows.filter(function(r){ return r.total > 0 && r.complete; });
   var sinObligaciones = allRows.filter(function(r){ return r.total === 0; });
 
-  var opts = periodOptions(t); 
+  var opts = periodOptions(t);
   if(!opts.includes(k)) opts.unshift(k);
 
   var renderTable = function(list){
@@ -535,8 +566,8 @@ function vControl(){
           '<td><div class="nm">'+esc(r.c.nombre)+'</div><div class="sm">'+esc(r.c.ruc)+'</div></td>'+
           '<td>'+(r.total > 0 ? dueChip(r) : '<span class="chip mut">Sin obligaciones</span>')+'</td>'+
           '<td>'+
-            (r.total > 0 ? 
-              '<div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>' : 
+            (r.total > 0 ?
+              '<div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>' :
               '<span class="sm">No asignadas.</span> <button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️ Asignar</button>'
             )+
           '</td>'+
@@ -559,7 +590,7 @@ function vControl(){
     (sinObligaciones.length ? renderTable(sinObligaciones) : '<div class="empty">Todos los clientes activos tienen obligaciones asignadas.</div>')+'</div>';
 }
 
-/* ANUAL - CON ORDENAMIENTO Y COLUMNA RUC */
+/* ANUAL */
 function cellInfoAnual(c, y, mNum) {
   var mKey = monthKey(y, mNum);
   var mItems = oblFor(c, 'M'); var mAv = avanceOf(c.id, mKey);
@@ -588,8 +619,7 @@ function vAnual(){
 
   var ord = UI.ordenAnual;
   rows.sort(function(a,b){
-    if(ord === 'alfabetico') return a.c.nombre.localeCompare(b.c.nombre,'es');
-    // ✅ CORRECCIÓN: El "0" ahora se ordena correctamente al principio
+    if(ord === 'alfabetico') return (a.c.nombre||'').localeCompare(b.c.nombre||'','es');
     if(ord === 'ruc') {
       var rA = (a.ruc9 === 0) ? 10 : a.ruc9;
       var rB = (b.ruc9 === 0) ? 10 : b.ruc9;
@@ -662,11 +692,10 @@ function vClaves(){
 function vCobros(){
   var rawList = cobrosList().filter(function(x){ return !x.anulado; });
   var porCliente = {};
-  
+
   rawList.forEach(function(x){
     var c = S.clientes[x.clienteId] || {nombre:'(cliente no registrado)', ruc:'', celular:'', grupo:''};
-    
-    // ✅ FILTRO: Aplicar búsqueda por cliente y por grupo
+
     var matchGrp = (UI.fgr_cobros === 'todos') || (UI.fgr_cobros === '__sin' ? !((c.grupo||'').trim()) : (c.grupo||'').trim() === UI.fgr_cobros);
     if (!matchGrp || !matchesQ(c, UI.q_cobros)) return;
 
@@ -676,10 +705,10 @@ function vCobros(){
     porCliente[x.clienteId].totalSaldo += calc.saldo;
     porCliente[x.clienteId].pendientes.push({x: x, calc: calc});
   });
-  
+
   var clientesArray = Object.values(porCliente);
   var recsList = recibosList();
-  
+
   return '<div class="bar">'+
     '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button>'+
     grpSelectCobros()+
@@ -881,7 +910,7 @@ function modalAnDist(cid, y, mNum){
     '<button class="btn" data-a="close">Listo</button></div>');
 }
 
-/* ============ NUEVOS MODALES: RESTAURAR Y EXCEL ============ */
+/* ============ MODALES: RESTAURAR E IMPORTAR ============ */
 function modalRestaurar(){
   openModal('<h2>📤 Restaurar Respaldo</h2>'+
     '<p class="sm">Selecciona un archivo JSON de respaldo generado previamente. <b>Esto sobrescribirá todos los datos actuales.</b></p>'+
@@ -900,8 +929,10 @@ function modalImportarExcel(){
 /* ============ IMPRESIÓN ============ */
 function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return; var c = S.clientes[x.clienteId] || {nombre:'Cliente', ruc:'N/A'}; var calc = cobroCalc(x);
-  var ultAbono = x.abonos && x.abonos.length ? x.abonos[x.abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
-  var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+id.slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div></div></div>'+
+  // ✅ FIX: protege x.abonos undefined
+  var abonos = x.abonos || [];
+  var ultAbono = abonos.length ? abonos[abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
+  var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+String(id).slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div></div></div>'+
     '<table style="width:100%;margin-bottom:12px;font-size:11px;border:none"><tr><td style="padding:2px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC:</strong> '+esc(c.ruc)+'</td></tr><tr><td style="padding:2px 0;border:none"><strong>PAGO:</strong> '+esc(ultAbono.metodo||'Efectivo')+'</td><td style="padding:2px 0;border:none"><strong>REF:</strong> '+esc(ultAbono.ref||'N/A')+'</td></tr></table>'+
     '<div style="font-weight:bold;font-size:12px;margin-bottom:4px">RECIBO</div>'+
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:15px;font-size:11px"><thead><tr><th style="width:25%;border:1px solid #000;padding:5px;text-align:center">FECHA</th><th style="width:55%;border:1px solid #000;padding:5px;text-align:center">CONCEPTO</th><th style="width:20%;border:1px solid #000;padding:5px;text-align:center">VALOR</th></tr></thead><tbody>'+
@@ -927,11 +958,13 @@ function imprimirEstadoCuenta(cid){
 
 function imprimirReciboMultiple(rid){
   var r = S.recibos[rid]; if(!r) return; var c = S.clientes[r.clienteId] || {nombre:'Cliente', ruc:'N/A'};
-  var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+r.id.slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(r.fecha)+'</div></div></div>'+
+  // ✅ FIX: protege r.detalles undefined
+  var detalles = r.detalles || [];
+  var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+String(r.id).slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(r.fecha)+'</div></div></div>'+
     '<table style="width:100%;margin-bottom:12px;font-size:11px;border:none"><tr><td style="padding:2px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC:</strong> '+esc(c.ruc)+'</td></tr><tr><td style="padding:2px 0;border:none"><strong>PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:2px 0;border:none"><strong>REF:</strong> '+esc(r.referencia||'N/A')+'</td></tr></table>'+
     '<div style="font-weight:bold;font-size:12px;margin-bottom:4px">RECIBO</div>'+
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:15px;font-size:11px"><thead><tr><th style="width:25%;border:1px solid #000;padding:5px;text-align:center">FECHA</th><th style="width:55%;border:1px solid #000;padding:5px;text-align:center">CONCEPTO</th><th style="width:20%;border:1px solid #000;padding:5px;text-align:center">VALOR</th></tr></thead><tbody>'+
-    r.detalles.map(function(d){ return '<tr><td style="border:1px solid #000;padding:5px;text-align:center">'+fmtDate(r.fecha)+'</td><td style="border:1px solid #000;padding:5px;text-align:left;word-wrap:break-word">'+esc(d.concepto)+'</td><td style="border:1px solid #000;padding:5px;text-align:right">'+money(d.monto)+'</td></tr>'; }).join('')+
+    detalles.map(function(d){ return '<tr><td style="border:1px solid #000;padding:5px;text-align:center">'+fmtDate(r.fecha)+'</td><td style="border:1px solid #000;padding:5px;text-align:left;word-wrap:break-word">'+esc(d.concepto)+'</td><td style="border:1px solid #000;padding:5px;text-align:right">'+money(d.monto)+'</td></tr>'; }).join('')+
     '<tr style="font-weight:bold"><td colspan="2" style="border:1px solid #000;padding:5px;text-align:left">TOTAL PAGADO</td><td style="border:1px solid #000;padding:5px;text-align:right">'+money(r.montoTotal)+'</td></tr></tbody></table>'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:35px"><div style="text-align:center;width:170px;border-top:1px solid #000;padding-top:4px;font-size:10px"><strong>ASECONTRIL</strong><br>Entregué Conforme</div><div style="text-align:center;width:170px;border-top:1px solid #000;padding-top:4px;font-size:10px">Recibí Conforme</div></div></div>';
   $('#print-area').innerHTML = html; window.print();
@@ -956,7 +989,9 @@ var ACT={
     await Store.put('avances',id,av);
     var c = S.clientes[d.c];
     if(c && c.cobra !== false && c.tarifa > 0){
-      var mNum = d.m ? Number(d.m) : (d.k.includes('-') ? Number(d.k.split('-')[1]) : 1); var yYear = UI.ay;
+      // ✅ FIX: usar mNumFromKey para no producir NaN con claves semestrales
+      var mNum = d.m ? Number(d.m) : mNumFromKey(d.k);
+      var yYear = UI.ay;
       var mItems = oblFor(c, 'M'); var mAv = avanceOf(d.c, monthKey(yYear, mNum));
       var sItemsInMonth = oblFor(c, 'S').filter(function(o){ return (o.m || (o.k.includes('SEM1')?7:1)) === mNum; });
       var sAv1 = avanceOf(d.c, yYear + '-S1'); var sAv2 = avanceOf(d.c, yYear + '-S2');
@@ -967,18 +1002,27 @@ var ACT={
       aItemsInMonth.forEach(function(o){ if (aAv.done && aAv.done[o.k]) doneNames.push(o.n); });
       if (totalItemsCount > 0 && doneNames.length === totalItemsCount) {
         var conceptoAuto = 'Honorarios / ' + doneNames.join(', ') + ' - ' + MESES[mNum-1] + ' ' + yYear;
-        if(!existeCobro(d.c, conceptoAuto)){ var cbId = 'cb_' + uid(); await Store.put('cobros', cbId, {id: cbId, clienteId: d.c, concepto: conceptoAuto, monto: c.tarifa, fechaEmision: ymd(new Date(yYear, mNum, 0)), abonos: []}); toast('⚡ Cuenta generada automáticamente'); }
+        if(!existeCobro(d.c, conceptoAuto)){
+          var cbId = 'cb_' + uid();
+          await Store.put('cobros', cbId, {id: cbId, clienteId: d.c, concepto: conceptoAuto, monto: c.tarifa, fechaEmision: ymd(new Date(yYear, mNum, 0)), abonos: []});
+          toast('⚡ Cuenta generada automáticamente');
+        }
       }
     }
-    if($('#modal').firstChild){ var mExact = d.m ? Number(d.m) : (d.k.includes('-') ? Number(d.k.split('-')[1]) : 1); modalAnDist(d.c, UI.ay, mExact); }
+    if($('#modal').firstChild){
+      var mExact = d.m ? Number(d.m) : mNumFromKey(d.k);
+      modalAnDist(d.c, UI.ay, mExact);
+    }
   },
   nuevoCobro:function(){ modalCobro(null, '', ''); },
   crearCobroDesdeModal:function(d){ modalCobro(d.c, d.con, d.fec); },
+  // ✅ FIX: un solo uid() para id y para campo id (antes se desincronizaban)
   saveCobro:async function(){
     var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
     if(!clienteId||!concepto||!monto){toast('Completa los campos');return;}
     if(existeCobro(clienteId, concepto)){ alert('⚠️ Ya existe este concepto para el cliente.'); return; }
-    await Store.put('cobros','cb_'+uid(),{id:'cb_'+uid(),clienteId:clienteId,concepto:concepto,monto:monto,fechaEmision:fechaEmision||todayStr(),abonos:[]});
+    var newId = 'cb_' + uid();
+    await Store.put('cobros', newId, {id: newId, clienteId: clienteId, concepto: concepto, monto: monto, fechaEmision: fechaEmision || todayStr(), abonos: []});
     closeModal(); toast('Registrado');
   },
   abonarCobro:function(d){ modalAbono(d.id); },
@@ -990,7 +1034,7 @@ var ACT={
   },
   cobroMultiple:function(d){ modalCobroMultiple(d.cid); },
   modalNotifCobro:function(d){ modalNotifCobro(d.cid); },
-  copiarWspMsg:function(){ var txt = $('#txt_notif_wsp'); if(txt){ txt.select(); document.execCommand('copy'); toast('Copiado'); } },
+  copiarWspMsg:function(){ var txt = $('#txt_notif_wsp'); if(txt){ txt.select(); try{ document.execCommand('copy'); toast('Copiado'); }catch(e){ if(navigator.clipboard){ navigator.clipboard.writeText(txt.value).then(function(){toast('Copiado');}); } } } },
   imprimirEstadoCuenta:function(d){ imprimirEstadoCuenta(d.cid); },
   calcMultTotal:function(){ var sum = 0; document.querySelectorAll('.chk-cobro-mult:checked').forEach(function(chk){ sum += Number(chk.dataset.saldo||0); }); var el = $('#mm_total'); if(el) el.value = sum.toFixed(2); },
   saveCobroMultiple:async function(d){
@@ -1067,12 +1111,14 @@ var ACT={
   saveCliente:function(d){
     var nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim(); if(!nombre||!ruc){toast('Llena nombre y RUC');return;}
     var oblMap = {}; document.querySelectorAll('.chk-obl').forEach(function(chk){ oblMap[chk.dataset.k] = chk.checked; });
-    var c={nombre:nombre,ruc:ruc,celular:val('m_celular').trim(),tipo:val('m_tipo'),grupo:val('m_grupo').trim(),activo: val('m_activo') === 'true',cobra: val('m_cobra') === 'true',tarifa: +val('m_tarifa') || 0,cobroFreq: val('m_cobroFreq'),doc: val('m_doc'),obl: oblMap};
+    // ✅ FIX: se eliminó cobroFreq (no existe el input); se usa 'M' por defecto
+    var c={nombre:nombre,ruc:ruc,celular:val('m_celular').trim(),tipo:val('m_tipo'),grupo:val('m_grupo').trim(),activo: val('m_activo') === 'true',cobra: val('m_cobra') === 'true',tarifa: +val('m_tarifa') || 0,cobroFreq:'M',doc: val('m_doc'),obl: oblMap};
     Store.put('clientes', d.id || ('c' + ruc), c); closeModal(); toast('Cliente guardado');
   },
   anCellDist:function(d){ modalAnDist(d.c, +d.y, +d.m); },
   close:function(){ closeModal(); },
-  bgclose:function(d,e){ if(e.target.classList.contains('bg'))closeModal(); }
+  // ✅ FIX: protege e.target sin classList
+  bgclose:function(d,e){ if(e && e.target && e.target.classList && e.target.classList.contains('bg')) closeModal(); }
 };
 
 document.addEventListener('click',function(e){ var b=e.target.closest('[data-a]');if(!b)return; var fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e); });
