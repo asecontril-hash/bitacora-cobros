@@ -922,7 +922,14 @@ async function copyText(s,label){
 const TIPOS_BASE=['SRI','IESS','Superintendencia de Compañías','Ministerio de Trabajo','Municipio','Banco','Correo','Otro'];
 const vItems=cid=>{const e=VAULT.data[cid];return e&&e.items?e.items:[]};
 const vTipos=()=>{const used=new Set();Object.values(VAULT.data).forEach(e=>(e.items||[]).forEach(i=>i.t&&used.add(i.t)));return [...new Set([...TIPOS_BASE,...used])]};
-const vNorm=o=>(o&&!o.items)?{items:[{id:uid(),t:'SRI',u:o.u||'',k:o.k||'',n:o.n||''}]}:o;
+const vNorm=o=>{
+  if(!o) return {items:[]};
+  if(!o.items){
+    if(o.k || o.u) return {items:[{id:uid(),t:'SRI',u:o.u||'',k:o.k||'',n:o.n||''}]};
+    return {items:[]};
+  }
+  return o;
+};
 const vFind=(cid,iid)=>vItems(cid).find(i=>i.id===iid);
 function vClaves(){
   if(!cryptoOK())return `<div class="card"><b>Cifrado no disponible</b><p class="sm">Este navegador o contexto no permite cifrar. La bóveda no se puede usar aquí.</p></div>`;
@@ -997,9 +1004,14 @@ async function vSaveEntry(cid,obj){
   VAULT.data[cid]=obj;
 }
 async function vSaveItem(cid,item){
-  const items=vItems(cid).map(i=>({...i})),ix=items.findIndex(i=>i.id===item.id);
-  if(ix>=0)items[ix]=item;else items.push(item);
-  await vSaveEntry(cid,{items});
+  const currentItems=vItems(cid).map(i=>({...i}));
+  const ix=currentItems.findIndex(i=>i.id===item.id);
+  if(ix>=0){
+    currentItems[ix]=item;
+  }else{
+    currentItems.push(item);
+  }
+  await vSaveEntry(cid,{items:currentItems});
 }
 async function vDelItem(cid,iid){
   const items=vItems(cid).filter(i=>i.id!==iid);
@@ -1008,8 +1020,8 @@ async function vDelItem(cid,iid){
 }
 function modalEntry(cid,iid){
   const c=S.clientes[cid],ex=iid?vFind(cid,iid):null;
-  const e=ex||{id:'',t:vItems(cid).some(i=>i.t==='SRI')?'':'SRI',u:c.ruc,k:'',n:''};
-  openModal(`<span id="v_sens"></span><h2>${ex?'Editar acceso':'Nuevo acceso'} · ${esc(c.nombre)}</h2>
+  const e=ex||{id:uid(),t:'SRI',u:c?c.ruc:'',k:'',n:''};
+  openModal(`<span id="v_sens"></span><h2>${ex?'Editar acceso':'Nuevo acceso'} · ${esc(c?c.nombre:'')}</h2>
   <div class="fgrid">
     <div class="full"><label>Tipo de acceso (elige uno o escribe uno nuevo)<input id="e_t" list="dl_tipos" value="${esc(e.t)}" placeholder="SRI, IESS, Municipio…" autocomplete="off"></label>
       <datalist id="dl_tipos">${vTipos().map(t=>`<option value="${esc(t)}">`).join('')}</datalist></div>
@@ -1017,8 +1029,8 @@ function modalEntry(cid,iid){
     <div class="full"><label>Clave<div style="display:flex;gap:6px"><input id="e_k" type="password" value="${esc(e.k)}" autocomplete="off" style="flex:1"><button class="btn" data-a="vEye" type="button">👁</button><button class="btn" data-a="vGen" type="button">Generar</button></div></label></div>
     <div class="full"><label>Nota (también cifrada)<input id="e_n" value="${esc(e.n)}" autocomplete="off"></label></div>
   </div>
-  <div class="actions">${ex?`<button class="btn danger" data-a="vDel" data-id="${cid}" data-i="${iid}" style="margin-right:auto">Eliminar este acceso</button>`:''}
-  <button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="vSave" data-id="${cid}" data-i="${iid||''}">Guardar cifrada</button></div>`);
+  <div class="actions">${ex?`<button class="btn danger" data-a="vDel" data-id="${cid}" data-i="${e.id}" style="margin-right:auto">Eliminar este acceso</button>`:''}
+  <button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="vSave" data-id="${cid}" data-i="${e.id}">Guardar cifrada</button></div>`);
 }
 function modalShow(cid,iid){
   const e=vFind(cid,iid);if(!e)return;
@@ -1161,7 +1173,14 @@ const ACT={
   vEdit:d=>modalEntry(d.id,d.i||''),vShow:d=>modalShow(d.id,d.i),
   vEye:()=>{const e=document.getElementById('e_k');e.type=e.type==='password'?'text':'password'},
   vGen:()=>{const e=document.getElementById('e_k');e.value=genPass();e.type='text'},
-  vSave:async d=>{const k=val('e_k'),t=val('e_t').trim();if(!t){toast('Indica el tipo de acceso (SRI, IESS…)');return}if(!k){toast('Escribe la clave');return}await vSaveItem(d.id,{id:d.i||uid(),t,u:val('e_u').trim(),k,n:val('e_n').trim()});closeModal();toast('Acceso '+t+' guardado cifrado')},
+  vSave:async d=>{
+    const k=val('e_k'),t=val('e_t').trim();
+    if(!t){toast('Indica el tipo de acceso (SRI, IESS…)');return}
+    if(!k){toast('Escribe la clave');return}
+    await vSaveItem(d.id,{id:d.i||uid(),t,u:val('e_u').trim(),k,n:val('e_n').trim()});
+    closeModal();
+    toast('Acceso '+t+' guardado cifrado');
+  },
   vDel:async d=>{await vDelItem(d.id,d.i);closeModal();toast('Acceso eliminado')},
   vCopyU:d=>{const i=vFind(d.id,d.i);if(i)copyText(i.u,'Usuario')},vCopyK:d=>{const i=vFind(d.id,d.i);if(i)copyText(i.k,'Clave')},
   vImport:()=>modalImport(),vDoImport:()=>vDoImport(),vChange:()=>modalChange(),vDoChange:()=>vDoChange(),
