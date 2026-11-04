@@ -673,16 +673,34 @@ function vClaves(){
   var meta=S.boveda.meta;
   if(!meta) return '<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b><p class="sm">Ingresa una clave maestra para cifrar las contraseñas.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>';
   if(!VAULT.key) return '<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda</b><p class="sm">Ingresa tu clave maestra.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
+  var groups={};
+  VAULT.data.forEach(function(item,idx){
+    var client=item.clienteId?S.clientes[item.clienteId]:null;
+    if(!client&&item.cliente){
+      client=clientesList().find(function(c){return c.nombre===item.cliente;})||null;
+    }
+    var clientId=client?client.id:'';
+    var groupKey=clientId||('name:'+String(item.cliente||''));
+    if(!groups[groupKey]) groups[groupKey]={id:clientId,name:client?client.nombre:(item.cliente||'Sin cliente'),items:[]};
+    groups[groupKey].items.push({item:item,idx:idx});
+  });
+  var groupKeys=Object.keys(groups).sort(function(a,b){return groups[a].name.localeCompare(groups[b].name,'es');});
   return '<div class="card">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b>🔒 Bóveda de Claves Cifradas</b><button class="btn danger sm" data-a="vLock">Bloquear</button></div>'+
     '<div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>'+
-    (VAULT.data.length ? '<div class="tablewrap"><table style="min-width:650px">'+
-      '<thead><tr><th>Cliente</th><th>Servicio</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+VAULT.data.map(function(item, idx){
-        return '<tr><td><b>'+esc(item.cliente)+'</b></td><td><span class="chip info">'+esc(item.servicio)+'</span></td><td>'+esc(item.usuario)+'</td>'+
-          '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'"> <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
-          '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td></tr>';
-      }).join('')+'</tbody></table></div>' : '<div class="empty">No hay claves guardadas.</div>')+'</div>';
+    (groupKeys.length ? groupKeys.map(function(groupKey){
+      var group=groups[groupKey];
+      return '<div class="card">'+
+        '<div class="bar"><b>👤 '+esc(group.name)+'</b><button class="btn sm" data-a="nuevaClave" data-cid="'+esc(group.id)+'" data-client="'+esc(group.name)+'">+ Clave para este cliente</button></div>'+
+        '<div class="tablewrap"><table style="min-width:600px">'+
+          '<thead><tr><th>Servicio</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
+          '<tbody>'+group.items.map(function(entry){
+            var item=entry.item,idx=entry.idx;
+            return '<tr><td><span class="chip info">'+esc(item.servicio)+'</span></td><td>'+esc(item.usuario)+'</td>'+
+              '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'"> <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
+              '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td></tr>';
+          }).join('')+'</tbody></table></div></div>';
+    }).join('') : '<div class="empty">No hay claves guardadas. Usa “Nueva Credencial” para agregar las de un cliente.</div>')+'</div>';
 }
 
 function vCobros(){
@@ -833,11 +851,11 @@ function modalObl(key){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="'+(key||'')+'">Guardar</button></div>');
 }
 
-function modalClave(){
+function modalClave(cid, clientName){
   var clis = clientesList();
   openModal('<h2>Nueva Credencial</h2><div class="fgrid">'+
-    '<div class="full"><label>Cliente<select id="vk_cli_sel"><option value="">-- Seleccionar --</option>'+clis.map(function(c){ return '<option value="'+esc(c.nombre)+'">'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
-    '<div class="full"><label>O escribe el nombre<input id="vk_cli_txt"></label></div>'+
+    '<div class="full"><label>Cliente<select id="vk_cli_sel"><option value="">-- Seleccionar --</option>'+clis.map(function(c){ return '<option value="'+esc(c.id)+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
+    '<div class="full"><label>O escribe el nombre<input id="vk_cli_txt" value="'+esc(clientName||'')+'"></label></div>'+
     '<div><label>Servicio<select id="vk_srv_sel" data-f="srv_sel"><option value="SRI">SRI</option><option value="IESS">IESS</option><option value="Supercias">Supercias</option><option value="Firma Electrónica">Firma Electrónica</option><option value="OTRO">Otro</option></select></label></div>'+
     '<div><input id="vk_srv_txt" placeholder="Nombre del servicio" style="display:none;margin-top:18px"></div>'+
     '<div class="full"><label>Usuario<input id="vk_usr"></label></div>'+
@@ -1097,8 +1115,8 @@ var ACT={
   vSetup:async function(){ var p=val('v_pass'); if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;} var salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter); await Store.put('boveda','meta',{salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA'})}); VAULT.key=key; render(); toast('Bóveda configurada'); },
   vUnlock:async function(){ var p=val('v_pass'),m=S.boveda.meta; try{ var key=await deriveKey(p,unb64(m.salt),m.iter); var ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0; VAULT.key=key; await loadVaultItems(); render(); toast('Bóveda abierta'); }catch(e){toast('Clave incorrecta');} },
   vLock:function(){ VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada'); },
-  nuevaClave:function(){ modalClave(); },
-  saveClave:async function(){ var cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim(); var cli = cliSel || cliTxt; var srv = val('vk_srv_sel'); if(srv==='OTRO') srv = val('vk_srv_txt').trim(); var usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim(); if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return;} VAULT.data.push({cliente:cli,servicio:srv||'SRI',usuario:usr,clave:pwd}); await saveVaultItems(); closeModal(); render(); toast('Credencial guardada'); },
+  nuevaClave:function(d){ modalClave(d.cid,d.client); },
+  saveClave:async function(){ var cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim(); var client=cliSel?S.clientes[cliSel]:null; var cli=client?client.nombre:cliTxt; var srv=val('vk_srv_sel'); if(srv==='OTRO') srv=val('vk_srv_txt').trim(); var usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim(); if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return;} VAULT.data.push({cliente:cli,clienteId:client?client.id:'',servicio:srv||'SRI',usuario:usr,clave:pwd}); await saveVaultItems(); closeModal(); toast('Credencial guardada'); render(); },
   delClave:async function(d){ VAULT.data.splice(Number(d.i),1); await saveVaultItems(); render(); toast('Eliminada'); },
   showPass:function(d){ var el=$('#vp_'+d.i); if(el) el.type = el.type==='password'?'text':'password'; },
   nuevoCliente:function(){ modalCliente(null); },
