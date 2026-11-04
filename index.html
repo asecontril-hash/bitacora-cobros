@@ -147,23 +147,19 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
   let db = null;
-  // ✅ FIX: se inicializa Firebase al cargar la ventana, por si el SDK aún no está listo
-  window.addEventListener('load', function(){
-    try {
-      if (typeof firebase === 'undefined') throw new Error('SDK Firebase no cargó');
-      const firebaseConfig = {
-        apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
-        authDomain: "bitacora-cobros.firebaseapp.com",
-        projectId: "bitacora-cobros",
-        storageBucket: "bitacora-cobros.firebasestorage.app",
-        messagingSenderId: "465013215619",
-        appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
-      };
-      firebase.initializeApp(firebaseConfig);
-      db = firebase.firestore();
-    } catch(e) { console.warn("Firebase no disponible:", e && e.stack ? e.stack : e); }
-  });
-  // ✅ FIX: se expone el accessor para que Store.init lo encuentre siempre
+  try {
+    if (typeof firebase === 'undefined') throw new Error('SDK Firebase no cargó');
+    const firebaseConfig = {
+      apiKey: "AIzaSyAgAS4n7z32f9KS3XxusNX0iiQGcNt9gVI",
+      authDomain: "bitacora-cobros.firebaseapp.com",
+      projectId: "bitacora-cobros",
+      storageBucket: "bitacora-cobros.firebasestorage.app",
+      messagingSenderId: "465013215619",
+      appId: "1:465013215619:web:f5f9c802b6616cb1b926b6"
+    };
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  } catch(e) { console.warn("Firebase no disponible:", e && e.stack ? e.stack : e); }
   window.AppDB = { use: async () => db };
 </script>
 </head>
@@ -910,15 +906,12 @@ function modalAnDist(cid, y, mNum){
     '<button class="btn" data-a="close">Listo</button></div>');
 }
 
-}
-
 /* ============ MODALES: RESTAURAR E IMPORTAR ============ */
 function modalRestaurar(){
   openModal('<h2>📤 Restaurar Respaldo</h2>'+
     '<p class="sm">Selecciona un archivo JSON de respaldo generado previamente. <b>Esto sobrescribirá todos los datos actuales.</b></p>'+
     '<div class="fgrid"><div class="full"><label>Archivo JSON<input type="file" id="file_restore" accept=".json"></label></div></div>'+
     '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn danger" data-a="ejecutarRestaurar">Restaurar Ahora</button></div>');
-}
 }
 
 function modalImportarExcel(){
