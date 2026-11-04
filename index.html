@@ -126,6 +126,21 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .progress-bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:4px;width:100px}
 .progress-fill{height:100%;background:var(--pri);width:0%;transition:width .3s}
 
+/* BÓVEDA DE CLAVES */
+.vault-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.vault-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px}
+.vault-client{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.vault-client-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.vault-client-name{font-weight:700;overflow-wrap:anywhere}
+.vault-count{color:var(--mut);font-size:12px;white-space:nowrap}
+.vault-credential{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:11px;margin-top:8px}
+.vault-credential-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.vault-actions{display:flex;gap:5px;flex-shrink:0}
+.vault-field{font-size:12px;color:var(--mut);margin-top:7px}
+.vault-field strong{display:block;color:var(--ink);font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.vault-secret{display:flex;align-items:center;gap:6px;margin-top:3px}
+.vault-secret input{flex:1;width:100%;font-family:monospace}
+
 /* IMPRESIÓN */
 #print-area { display: none; }
 @page { size: A4 portrait; margin: 10mm; }
@@ -674,10 +689,11 @@ function vClaves(){
   if(!meta) return '<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b><p class="sm">Ingresa una clave maestra para cifrar las contraseñas.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>';
   if(!VAULT.key) return '<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda</b><p class="sm">Ingresa tu clave maestra.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
   var groups={};
+  var clients=clientesList();
   VAULT.data.forEach(function(item,idx){
     var client=item.clienteId?S.clientes[item.clienteId]:null;
     if(!client&&item.cliente){
-      client=clientesList().find(function(c){return c.nombre===item.cliente;})||null;
+      client=clients.find(function(c){return c.nombre===item.cliente;})||null;
     }
     var clientId=client?client.id:'';
     var groupKey=clientId||('name:'+String(item.cliente||''));
@@ -686,21 +702,20 @@ function vClaves(){
   });
   var groupKeys=Object.keys(groups).sort(function(a,b){return groups[a].name.localeCompare(groups[b].name,'es');});
   return '<div class="card">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b>🔒 Bóveda de Claves Cifradas</b><button class="btn danger sm" data-a="vLock">Bloquear</button></div>'+
-    '<div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>'+
-    (groupKeys.length ? groupKeys.map(function(groupKey){
+    '<div class="vault-toolbar"><div><b>🔒 Bóveda de Claves Cifradas</b><div class="sm">Credenciales organizadas por cliente</div></div><div class="vault-actions"><button class="btn pri" data-a="nuevaClave">+ Nueva clave</button><button class="btn danger sm" data-a="vLock">Bloquear</button></div></div>'+
+    (groupKeys.length ? '<div class="vault-grid">'+groupKeys.map(function(groupKey){
       var group=groups[groupKey];
-      return '<div class="card">'+
-        '<div class="bar"><b>👤 '+esc(group.name)+'</b><button class="btn sm" data-a="nuevaClave" data-cid="'+esc(group.id)+'" data-client="'+esc(group.name)+'">+ Clave para este cliente</button></div>'+
-        '<div class="tablewrap"><table style="min-width:600px">'+
-          '<thead><tr><th>Servicio</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
-          '<tbody>'+group.items.map(function(entry){
+      return '<section class="vault-client">'+
+        '<div class="vault-client-head"><div><div class="vault-client-name">👤 '+esc(group.name)+'</div><div class="vault-count">'+group.items.length+' '+(group.items.length===1?'credencial':'credenciales')+'</div></div><button class="btn sm" data-a="nuevaClave" data-cid="'+esc(group.id)+'">+ Agregar</button></div>'+
+        group.items.map(function(entry){
             var item=entry.item,idx=entry.idx;
-            return '<tr><td><span class="chip info">'+esc(item.servicio)+'</span></td><td>'+esc(item.usuario)+'</td>'+
-              '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'"> <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
-              '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td></tr>';
-          }).join('')+'</tbody></table></div></div>';
-    }).join('') : '<div class="empty">No hay claves guardadas. Usa “Nueva Credencial” para agregar las de un cliente.</div>')+'</div>';
+            return '<article class="vault-credential">'+
+              '<div class="vault-credential-head"><span class="chip info">'+esc(item.servicio||'Servicio')+'</span><div class="vault-actions"><button class="btn sm" data-a="editClave" data-i="'+idx+'" aria-label="Editar credencial">✏️</button><button class="btn sm danger" data-a="delClave" data-i="'+idx+'" aria-label="Eliminar credencial">🗑️</button></div></div>'+
+              '<div class="vault-field">Usuario<strong>'+esc(item.usuario)+'</strong></div>'+
+              '<div class="vault-field">Clave del sitio<div class="vault-secret"><input type="password" value="'+esc(item.clave)+'" readonly id="vp_'+idx+'" aria-label="Clave del sitio"><button class="btn sm" data-a="showPass" data-i="'+idx+'" aria-label="Mostrar u ocultar clave">👁</button></div></div>'+
+            '</article>';
+          }).join('')+'</section>';
+    }).join('')+'</div>' : '<div class="empty">No hay claves guardadas. Usa “Nueva clave” para agregar credenciales de un cliente.</div>')+'</div>';
 }
 
 function vCobros(){
@@ -851,16 +866,23 @@ function modalObl(key){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="'+(key||'')+'">Guardar</button></div>');
 }
 
-function modalClave(cid, clientName){
+function modalClave(index,cid){
   var clis = clientesList();
-  openModal('<h2>Nueva Credencial</h2><div class="fgrid">'+
-    '<div class="full"><label>Cliente<select id="vk_cli_sel"><option value="">-- Seleccionar --</option>'+clis.map(function(c){ return '<option value="'+esc(c.id)+'" '+(c.id===cid?'selected':'')+'>'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
-    '<div class="full"><label>O escribe el nombre<input id="vk_cli_txt" value="'+esc(clientName||'')+'"></label></div>'+
-    '<div><label>Servicio<select id="vk_srv_sel" data-f="srv_sel"><option value="SRI">SRI</option><option value="IESS">IESS</option><option value="Supercias">Supercias</option><option value="Firma Electrónica">Firma Electrónica</option><option value="OTRO">Otro</option></select></label></div>'+
-    '<div><input id="vk_srv_txt" placeholder="Nombre del servicio" style="display:none;margin-top:18px"></div>'+
-    '<div class="full"><label>Usuario<input id="vk_usr"></label></div>'+
-    '<div class="full"><label>Contraseña<input id="vk_pwd" type="text"></label></div></div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>');
+  var editing=index!==undefined&&index!==null;
+  var item=editing?VAULT.data[Number(index)]:null;
+  if(editing&&!item) return;
+  var selectedId=cid||(item&&item.clienteId)||'';
+  if(!selectedId&&item&&item.cliente){
+    var match=clis.find(function(c){return c.nombre===item.cliente;});
+    if(match) selectedId=match.id;
+  }
+  var service=item&&item.servicio||'';
+  openModal('<h2>'+(editing?'Editar':'Nueva')+' credencial</h2><div class="fgrid">'+
+    '<div class="full"><label>Cliente<select id="vk_cli_sel" required><option value="">-- Selecciona un cliente --</option>'+clis.map(function(c){ return '<option value="'+esc(c.id)+'" '+(c.id===selectedId?'selected':'')+'>'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
+    '<div class="full"><label>Servicio o sitio<input id="vk_srv" list="vk_service_options" value="'+esc(service)+'" placeholder="Ej.: SRI, IESS, Supercias" required><datalist id="vk_service_options"><option value="SRI"><option value="IESS"><option value="Supercias"><option value="Firma Electrónica"></datalist></label></div>'+
+    '<div class="full"><label>Usuario<input id="vk_usr" value="'+esc(item&&item.usuario||'')+'" autocomplete="off"></label></div>'+
+    '<div class="full"><label>Clave del sitio<input id="vk_pwd" type="password" value="'+esc(item&&item.clave||'')+'" autocomplete="new-password"></label></div></div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave" data-i="'+(editing?index:'')+'">'+(editing?'Guardar cambios':'Guardar cifrado')+'</button></div>');
 }
 
 function modalCobro(cid, conceptoDef, fechaSugerida){
@@ -1115,8 +1137,17 @@ var ACT={
   vSetup:async function(){ var p=val('v_pass'); if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;} var salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter); await Store.put('boveda','meta',{salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA'})}); VAULT.key=key; render(); toast('Bóveda configurada'); },
   vUnlock:async function(){ var p=val('v_pass'),m=S.boveda.meta; try{ var key=await deriveKey(p,unb64(m.salt),m.iter); var ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0; VAULT.key=key; await loadVaultItems(); render(); toast('Bóveda abierta'); }catch(e){toast('Clave incorrecta');} },
   vLock:function(){ VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada'); },
-  nuevaClave:function(d){ modalClave(d.cid,d.client); },
-  saveClave:async function(){ var cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim(); var client=cliSel?S.clientes[cliSel]:null; var cli=client?client.nombre:cliTxt; var srv=val('vk_srv_sel'); if(srv==='OTRO') srv=val('vk_srv_txt').trim(); var usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim(); if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return;} VAULT.data.push({cliente:cli,clienteId:client?client.id:'',servicio:srv||'SRI',usuario:usr,clave:pwd}); await saveVaultItems(); closeModal(); toast('Credencial guardada'); render(); },
+  nuevaClave:function(d){ modalClave(null,d.cid); },
+  editClave:function(d){ modalClave(d.i); },
+  saveClave:async function(d){
+    var clientId=val('vk_cli_sel'), client=clientId?S.clientes[clientId]:null;
+    var servicio=val('vk_srv').trim(), usuario=val('vk_usr').trim(), clave=val('vk_pwd');
+    if(!client||!servicio||!usuario||!clave){toast('Selecciona el cliente e ingresa servicio, usuario y clave');return;}
+    var credential={cliente:client.nombre,clienteId:clientId,servicio:servicio,usuario:usuario,clave:clave};
+    if(d.i==='') VAULT.data.push(credential);
+    else VAULT.data[Number(d.i)]=credential;
+    await saveVaultItems(); closeModal(); render(); toast(d.i===''?'Credencial guardada':'Credencial actualizada');
+  },
   delClave:async function(d){ VAULT.data.splice(Number(d.i),1); await saveVaultItems(); render(); toast('Eliminada'); },
   showPass:function(d){ var el=$('#vp_'+d.i); if(el) el.type = el.type==='password'?'text':'password'; },
   nuevoCliente:function(){ modalCliente(null); },
