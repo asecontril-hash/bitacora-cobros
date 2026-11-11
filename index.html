@@ -103,7 +103,7 @@ td.r,th.r{text-align:right}
 .fgrid input,.fgrid select{width:100%;margin-top:3px}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
-#toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+#toast div{background:#1b2733;color:#fff;padding:99px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
 table.ym th,table.ym td{padding:5px 4px;text-align:center}
 table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:190px;max-width:230px}
 .cl{display:inline-block;min-width:34px;padding:3px 4px;border-radius:7px;font-size:12px;font-weight:700;border:0;font-family:inherit;cursor:pointer}
@@ -189,7 +189,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 <header class="header-movil">
   <h1>📒 ASECONTRIL</h1>
-  <button class="btn-menu-movil" id="mobile-logout" data-a="lockApp" title="Cerrar sesión" aria-label="Cerrar sesión" style="display:none;font-size:15px">🔒 Salir</button>
+  <button class="btn-menu-movil" id="mobile-logout" data-a="logoutUser" title="Cerrar sesión" aria-label="Cerrar sesión" style="display:none;font-size:15px">🔒 Salir</button>
   <button class="btn-menu-movil" onclick="document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.overlay').classList.toggle('open');">☰</button>
 </header>
 
@@ -225,39 +225,10 @@ var DEFAULT_OBL=[
 var DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-var GATE={logged:false,migrationStarted:false};
-function legacyGateCfg(){try{return localStorage.getItem('bitacora_gate_pass')||'';}catch(e){return '';}}
-function gateCfg(){return S.config&&S.config.accessGate?S.config.accessGate:null;}
-function gateEnabled(){return !!gateCfg()||!!legacyGateCfg();}
-async function createGateConfig(pass){
-  var salt=crypto.getRandomValues(new Uint8Array(16)),iter=150000,key=await deriveKey(pass,salt,iter);
-  return {salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA_ACCESS'})};
-}
-async function verifyGatePassword(pass,config){
-  try{
-    var key=await deriveKey(pass,unb64(config.salt),config.iter);
-    var check=await decJSON(key,config.check);
-    return check.ok==='BITACORA_ACCESS';
-  }catch(e){return false;}
-}
-async function migrateLegacyGate(){
-  var legacy=legacyGateCfg();
-  if(!Store.db||gateCfg()||!legacy||GATE.migrationStarted) return;
-  GATE.migrationStarted=true;
-  try{
-    var config=await createGateConfig(legacy);
-    await Store.db.doc('config/accessGate').set(config);
-    S.config.accessGate=config;
-    try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
-    render();
-  }catch(error){
-    GATE.migrationStarted=false;
-    console.error('No se pudo sincronizar la clave de acceso:',error);
-    toast('La clave sigue guardada en este dispositivo; no se pudo sincronizar.');
-  }
-}
+/* SISTEMA DE AUTENTICACIÓN Y ROLES DE USUARIO */
+var CURRENT_USER = null;
 
-var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},ready:false,configReady:false,configError:false,kind:'…'};
+var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},usuarios:{},ready:false,kind:'…'};
 var loaded={};
 var now=new Date();
 var UI={ ay:new Date().getFullYear(), tab:'panel', ctype:'M', cper:null, q_cli:'', q_ctrl:'', q_anual:'', fgr:'todos', ordenAnual:'alfabetico', q_cobros:'', fgr_cobros:'todos' };
@@ -282,7 +253,6 @@ function fmtDate(s){ if(!s)return''; var p=s.split('-'); return p[2]+'/'+p[1]+'/
 function fmtD(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
 function toast(msg){ var t=document.createElement('div');t.textContent=msg;$('#toast').appendChild(t);setTimeout(function(){t.remove();},3200); }
 
-// ✅ FIX: ptype valida meses 01..12 y rechaza basura
 function ptype(k){
   if (!k || typeof k !== 'string') return 'A';
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(k)) return 'M';
@@ -290,7 +260,6 @@ function ptype(k){
   if (/^\d{4}$/.test(k)) return 'A';
   return 'A';
 }
-// ✅ FIX: plabel protege contra índices inválidos (evita undefined[0])
 function plabel(k){
   if(!k) return 'Período Actual';
   var t=ptype(k);
@@ -306,7 +275,6 @@ function plabel(k){
   }
   return 'Año '+k;
 }
-// ✅ FIX: helper para obtener mes numérico desde una clave de período
 function mNumFromKey(k){
   if (typeof k !== 'string') return 1;
   if (/^\d{4}-\d\d$/.test(k)) return +k.split('-')[1] || 1;
@@ -315,7 +283,6 @@ function mNumFromKey(k){
 }
 
 function monthKey(y,m){ return y+'-'+pad(m); }
-// ✅ FIX: maxM acotado a 12 (antes generaba "2026-13".."2026-15" en oct-dic → rompía plabel)
 function periodOptions(t){
   var y=now.getFullYear(),m=now.getMonth()+1,out=[];
   if(t==='M'){ for(var yy=y; yy>=2026; yy--){ var maxM = (yy===y)? Math.min(m+3,12) : 12; for(var mm=maxM; mm>=1; mm--) out.push(monthKey(yy,mm)); } }
@@ -355,7 +322,6 @@ function oblMonthIndex(c, oblKey){
   if(oblKey==='IM_RTA') return c.tipo==='SOCIEDAD'?4:3;
   if(oblKey==='PM') return (c.tipo==='SOCIEDAD'||c.contabilidad)?6:7;
   var target=getOblList().find(function(o){ return o.k===oblKey; });
-  // ✅ FIX: si m es 0 o no existe, devolver 1 para no perder la obligación del anual
   return target&&typeof target.m==='number'&&target.m>0?target.m:1;
 }
 function daysTo(d){ return Math.round((d-midnight())/864e5); }
@@ -386,6 +352,8 @@ function searchInput(fieldKey, valStr){ return '<input type="text" id="src_'+fie
 function activos(){ return clientesList().filter(function(c){ return c.activo!==false; }); }
 function cobrosList(){ return Object.entries(S.cobros||{}).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }); }
 function recibosList(){ return Object.entries(S.recibos||{}).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }); }
+function usuariosList(){ return Object.entries(S.usuarios||{}).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }); }
+
 function existeCobro(clienteId, concepto) {
   var conceptoNorm = concepto.trim().toLowerCase();
   return cobrosList().some(function(x){ return x.clienteId === clienteId && !x.anulado && (x.concepto || '').trim().toLowerCase() === conceptoNorm; });
@@ -428,46 +396,37 @@ function cobroCalc(x){
 function estChip(e){ return {pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]; }
 
 /* ============ BASE DE DATOS ============ */
-var COLS=['clientes','cobros','recibos','avances','config','boveda','catObl'];
+var COLS=['clientes','cobros','recibos','avances','config','boveda','catObl','usuarios'];
 var Store={
   db:null,
   init: async function(){
     var dbConn=null;
     try{ if(window.AppDB&&window.AppDB.use) dbConn=await window.AppDB.use('db'); }catch(e){ dbConn=null; }
-    setTimeout(function(){ if(!S.ready){ S.ready=true; render(); } }, 800);
+    setTimeout(function(){ if(!S.ready){ S.ready=true; this.initAdminUser(); render(); } }.bind(this), 800);
     if(dbConn){
       this.db=dbConn; S.kind='nube';
       COLS.forEach(function(col){
-        if(col==='config'){
-          dbConn.doc('config/accessGate').onSnapshot(function(doc){
-            S.config=doc.exists?{accessGate:doc.data()}:{};
-            loaded[col]=true;S.configReady=true;S.configError=false;
-            if(S.config.accessGate&&legacyGateCfg()){try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}}
-            if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); migrateLegacyGate(); }
-          },function(err){
-            loaded[col]=true;S.configReady=true;S.configError=true;
-            console.error('No se pudo verificar la configuración de acceso:',err);
-            if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
-          });
-          return;
-        }
         dbConn.collection(col).onSnapshot(function(snap){
           var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
           S[col]=o; loaded[col]=true;
-          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); migrateLegacyGate(); }
-        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); } });
+          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.initAdminUser(); render(); }
+        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.initAdminUser(); render(); } });
       });
     }else{
       S.kind='local';
-      S.configReady=true;
       try{ var raw=localStorage.getItem('bitacora_v1'); if(raw){ var d=JSON.parse(raw); COLS.forEach(function(c){ S[c]=d[c]||{}; }); } }catch(e){}
-      S.ready=true; render();
+      S.ready=true; this.initAdminUser(); render();
+    }
+  },
+  initAdminUser: async function(){
+    if(!S.usuarios || Object.keys(S.usuarios).length === 0){
+      var adminUser = { username: 'admin', nombre: 'Administrador principal', pass: 'admin123', rol: 'ADMIN' };
+      await this.put('usuarios', 'usr_admin', adminUser);
     }
   },
   saveLocal: function(){ try{ var obj={}; COLS.forEach(function(c){ obj[c]=S[c]; }); localStorage.setItem('bitacora_v1', JSON.stringify(obj)); }catch(e){} },
   put: async function(col,id,data){ data=clean(data); S[col][id]=data; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar'); } } else this.saveLocal(); },
   del: async function(col,id){ delete S[col][id]; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } } else this.saveLocal(); },
-  // ✅ FIX: ahora usa batch y espera el commit
   clearCollection: async function(col){
     S[col] = {}; render();
     if(this.db){
@@ -518,46 +477,52 @@ async function decJSON(key,d){ var pt=await crypto.subtle.decrypt({name:'AES-GCM
 async function loadVaultItems(){ if(!VAULT.key||!S.boveda.items) { VAULT.data = []; return; } try { VAULT.data = await decJSON(VAULT.key, S.boveda.items); } catch(e) { VAULT.data = []; } }
 async function saveVaultItems(){ if(!VAULT.key) return; var enc = await encJSON(VAULT.key, VAULT.data); await Store.put('boveda', 'items', enc); }
 
-/* ============ VISTAS ============ */
-var TABS=[['panel','📊 Dashboard'],['control','📋 Control obligaciones'],['anual','📅 Resumen anual'],['cobros','💰 Cuentas por Cobrar'],['clientes','👥 Clientes'],['grupos','🏢 Grupos y referidos'],['catObl','⚙️ Catálogo obligaciones'],['ajustes','🛠️ Ajustes']];
+/* ============ VISTAS Y AUTENTICACIÓN ============ */
+var TABS_ALL=[
+  {id:'panel', name:'📊 Dashboard', roles:['ADMIN','OPERADOR']},
+  {id:'control', name:'📋 Control obligaciones', roles:['ADMIN','OPERADOR']},
+  {id:'anual', name:'📅 Resumen anual', roles:['ADMIN','OPERADOR']},
+  {id:'cobros', name:'💰 Cuentas por Cobrar', roles:['ADMIN']},
+  {id:'clientes', name:'👥 Clientes', roles:['ADMIN','OPERADOR']},
+  {id:'grupos', name:'🏢 Grupos y referidos', roles:['ADMIN','OPERADOR']},
+  {id:'catObl', name:'⚙️ Catálogo obligaciones', roles:['ADMIN']},
+  {id:'usuarios', name:'👤 Usuarios y Roles', roles:['ADMIN']},
+  {id:'ajustes', name:'🛠️ Ajustes', roles:['ADMIN']}
+];
 
 function render(){
-  var cfgPass = gateEnabled();
-  var mobileLogout=$('#mobile-logout');
-  if(mobileLogout){
-    var appReady=S.ready&&(!Store.db||S.configReady);
-    mobileLogout.style.display=appReady&&(!cfgPass||GATE.logged)?'inline-flex':'none';
-    mobileLogout.dataset.a=cfgPass?'lockApp':'securitySettings';
-    mobileLogout.textContent=cfgPass?'🔒 Salir':'🔐 Acceso';
-    mobileLogout.title=cfgPass?'Cerrar sesión':'Configurar clave de acceso';
-    mobileLogout.setAttribute('aria-label',cfgPass?'Cerrar sesión':'Configurar clave de acceso');
-  }
-  if(Store.db&&!S.configReady&&!legacyGateCfg()){
-    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
-    $('#main').innerHTML='<div class="empty">Verificando configuración de acceso…</div>';
-    return;
-  }
-  if(Store.db&&S.configError&&!legacyGateCfg()){
-    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
-    $('#main').innerHTML='<div class="card"><b>No se pudo verificar el acceso</b><p class="sm">Firebase no permite leer el documento de configuración de acceso. Un administrador debe permitir la lectura de <code>config/accessGate</code> en las reglas de Firestore; no es necesario abrir toda la colección. Después, recarga la página.</p><button class="btn pri" data-a="reloadApp">Reintentar</button></div>';
-    return;
-  }
-  if(cfgPass && !GATE.logged){
-    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
-    $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
-      '<h2 style="margin-bottom:8px">🔒 Acceso</h2><p class="sm" style="margin-bottom:16px">Ingresa tu contraseña:</p>'+
-      '<input type="password" id="g_pass_input" placeholder="Contraseña" style="width:100%;margin-bottom:12px" onkeydown="if(event.key===\'Enter\')ACT.loginGate()">'+
-      '<button class="btn pri" data-a="loginGate" style="width:100%">Desbloquear</button></div>';
-    return;
-  }
   if(!S.ready){ $('#main').innerHTML='<div class="empty">Cargando…</div>'; return; }
 
-  var lockBtn = cfgPass ? '<button class="menu-btn" data-a="lockApp" style="margin-top:auto;color:var(--bad)">🔒 Cerrar sesión</button>' : '<button class="menu-btn" data-a="securitySettings" style="margin-top:auto;color:var(--pri)">🔐 Configurar acceso</button>';
-  $('#sidebar').innerHTML='<h1>📒 ASECONTRIL <span>Bitácora Contable</span></h1>'+
-    TABS.map(function(pair){ return '<button class="menu-btn '+(UI.tab===pair[0]?'on':'')+'" data-a="tab" data-k="'+pair[0]+'">'+pair[1]+'</button>'; }).join('')+
-    '<div style="margin-top:auto;padding:10px;font-size:11px;color:var(--mut);text-align:center">'+(S.kind==='nube'?'☁️ Sincronizado':'💾 Local')+'</div>'+lockBtn;
+  var mobileLogout=$('#mobile-logout');
+  if(mobileLogout){
+    mobileLogout.style.display=CURRENT_USER ? 'inline-flex' : 'none';
+  }
 
-  var v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
+  /* PANTALLA DE LOGIN DE USUARIOS */
+  if(!CURRENT_USER){
+    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
+    $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
+      '<h2 style="margin-bottom:4px">🔑 Iniciar Sesión</h2><p class="sm" style="margin-bottom:16px">Acceso al sistema ASECONTRIL</p>'+
+      '<input type="text" id="g_user_input" placeholder="Usuario" style="width:100%;margin-bottom:10px" autocomplete="username">'+
+      '<input type="password" id="g_pass_input" placeholder="Contraseña" style="width:100%;margin-bottom:14px" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')ACT.loginUser()">'+
+      '<button class="btn pri" data-a="loginUser" style="width:100%">Ingresar</button>'+
+      '<p class="sm" style="margin-top:14px;font-size:11px">Usuario inicial: <b>admin</b> / Clave: <b>admin123</b></p>'+
+      '</div>';
+    return;
+  }
+
+  // Filtrar Pestañas según el rol
+  var navTabs = TABS_ALL.filter(function(tab){ return tab.roles.includes(CURRENT_USER.rol); });
+  if(!navTabs.some(function(t){ return t.id === UI.tab; })){
+    UI.tab = navTabs[0].id;
+  }
+
+  $('#sidebar').innerHTML='<h1>📒 ASECONTRIL <span>Bitácora Contable</span></h1>'+
+    navTabs.map(function(t){ return '<button class="menu-btn '+(UI.tab===t.id?'on':'')+'" data-a="tab" data-k="'+t.id+'">'+t.name+'</button>'; }).join('')+
+    '<div style="margin-top:auto;padding:10px;font-size:11px;color:var(--mut);text-align:center">Usuario: <b>'+esc(CURRENT_USER.nombre)+'</b> ('+CURRENT_USER.rol+')<br>'+(S.kind==='nube'?'☁️ Sincronizado':'💾 Local')+'</div>'+
+    '<button class="menu-btn" data-a="logoutUser" style="color:var(--bad)">🔒 Cerrar sesión</button>';
+
+  var v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,cobros:vCobros,clientes:vClientes,grupos:vGrupos,usuarios:vUsuarios,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
 }
 
@@ -567,7 +532,7 @@ function dueChip(r){
   return '<span class="chip '+(r.dd<=7?'warn':'info')+'">Vence en '+r.dd+' d · '+fmtD(r.due)+'</span>';
 }
 
-/* DASHBOARD - ACORDEÓN POR FECHA */
+/* DASHBOARD */
 function vPanel(){
   var k=defaultPeriod('M');
   var allRows = rowsFor('M',k).filter(function(r){ return r.total > 0; });
@@ -579,8 +544,6 @@ function vPanel(){
 
   var cs=cobrosList().filter(function(x){return !x.anulado;}).map(function(x){ return Object.assign({x:x}, cobroCalc(x)); });
   var porCobrar=cs.reduce(function(s,r){return s+r.saldo;},0);
-  var mesStr=now.getFullYear()+'-'+pad(now.getMonth()+1);
-  var cobMes=cs.reduce(function(s,r){ return s+(r.x.abonos||[]).filter(function(a){return (a.f||'').startsWith(mesStr);}).reduce(function(t,a){return t+(+a.m||0);},0); },0);
 
   var renderAcc = function(title, list, color){
     if(!list.length) return '';
@@ -598,7 +561,7 @@ function vPanel(){
               '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
               '<span class="sm">'+r.done+'/'+r.total+'</span>'+
             '</div>'+
-            '<div><button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️</button></div>'+
+            '<div>'+(CURRENT_USER.rol==='ADMIN'?'<button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️</button>':'')+'</div>'+
           '</div>';
         }).join('')+
       '</div></div>';
@@ -608,7 +571,7 @@ function vPanel(){
     '<div class="card kpi '+(vencidos.length?'bad':'ok')+'"><div class="n">'+vencidos.length+'</div><div class="l">Declaraciones vencidas</div></div>'+
     '<div class="card kpi warn"><div class="n">'+proximos.length+'</div><div class="l">Vencen esta semana</div></div>'+
     '<div class="card kpi ok"><div class="n">'+alDia.length+'</div><div class="l">Al día completos</div></div>'+
-    '<div class="card kpi '+(porCobrar?'warn':'ok')+'"><div class="n">'+money(porCobrar)+'</div><div class="l">Por cobrar</div></div>'+
+    (CURRENT_USER.rol==='ADMIN'?'<div class="card kpi '+(porCobrar?'warn':'ok')+'"><div class="n">'+money(porCobrar)+'</div><div class="l">Por cobrar</div></div>':'')+
   '</div>'+
   '<div class="card">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
@@ -655,7 +618,7 @@ function vControl(){
           '<td>'+
             (r.total > 0 ?
               '<div class="obs">'+r.items.map(function(o){ return '<button class="ob '+(r.av.done&&r.av.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+r.c.id+'" data-k="'+k+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>' :
-              '<span class="sm">No asignadas.</span> <button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️ Asignar</button>'
+              '<span class="sm">No asignadas.</span> '+(CURRENT_USER.rol==='ADMIN'?'<button class="btn sm" data-a="editCliente" data-id="'+r.c.id+'">⚙️ Asignar</button>':'')
             )+
           '</td>'+
         '</tr>';
@@ -816,7 +779,8 @@ function vCobros(){
 
 function vClientes(){
   var L=clientesList().filter(function(c){ return matchesQ(c, UI.q_cli); });
-  return '<div class="bar"><button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button><button class="btn danger" data-a="clearClientObligations">⏸ Dejar todos sin obligaciones</button>'+ searchInput('q_cli', UI.q_cli)+'</div>'+
+  var isAdmin = CURRENT_USER.rol === 'ADMIN';
+  return '<div class="bar">'+(isAdmin?'<button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button><button class="btn danger" data-a="clearClientObligations">⏸ Dejar todos sin obligaciones</button>':'')+ searchInput('q_cli', UI.q_cli)+'</div>'+
   '<p class="sm">Abre la ficha de cada cliente para revisar sus datos, obligaciones y claves.</p>'+
   '<div class="card">'+
   (L.length?'<div class="tablewrap"><table>'+
@@ -826,7 +790,9 @@ function vClientes(){
       return '<tr><td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td><td>'+esc(c.ruc)+'</td><td><b>'+(esc(c.celular)||'—')+'</b></td><td>'+esc(c.tipo)+'</td>'+
         '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b></td>'+
         '<td>'+(isAct ? '<span class="chip ok">Activo</span>' : '<span class="chip warn">⏸ Suspendido</span>')+'</td>'+
-        '<td><button class="btn sm pri" data-a="openClientProfile" data-id="'+c.id+'">Ficha</button> <button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button> <button class="btn sm '+(isAct?'danger':'pri')+'" data-a="toggleSuspend" data-id="'+c.id+'">'+(isAct?'⏸ Suspender':'▶ Activar')+'</button></td></tr>';
+        '<td><button class="btn sm pri" data-a="openClientProfile" data-id="'+c.id+'">Ficha</button> '+
+        (isAdmin ? '<button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button> <button class="btn sm '+(isAct?'danger':'pri')+'" data-a="toggleSuspend" data-id="'+c.id+'">'+(isAct?'⏸ Suspender':'▶ Activar')+'</button>' : '')+
+        '</td></tr>';
     }).join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes.</div>')+
   '</div>';
 }
@@ -839,6 +805,8 @@ function renderClientProfile(id,tab){
   var selected=obl.filter(function(o){return clientObligationEnabled(c,o);}).length;
   var nav=[['resumen','Resumen'],['obligaciones','Obligaciones'],['claves','Claves']];
   var content='';
+  var isAdmin = CURRENT_USER.rol === 'ADMIN';
+
   if(CLIENTE_FICHA.tab==='resumen'){
     content='<div class="client-profile-summary">'+
       '<div><span>RUC</span><strong>'+esc(c.ruc||'—')+'</strong></div>'+
@@ -849,18 +817,18 @@ function renderClientProfile(id,tab){
       '<div><span>Cobro</span><strong>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</strong></div>'+
       '<div><span>Obligaciones asignadas</span><strong>'+selected+' / '+obl.length+'</strong></div>'+
       '<div><span>Claves guardadas</span><strong>'+(VAULT.key?getClientCredentialEntries(id).length:(S.boveda.items?'Bloqueadas':'0'))+'</strong></div>'+
-      '</div><div class="actions"><button class="btn" data-a="editCliente" data-id="'+id+'">Editar datos generales</button></div>';
+      '</div>'+(isAdmin?'<div class="actions"><button class="btn" data-a="editCliente" data-id="'+id+'">Editar datos generales</button></div>':'');
   }else if(CLIENTE_FICHA.tab==='obligaciones'){
     var byFreq={P:[],S:[],A:[]};
     obl.forEach(function(o){(byFreq[o.f]||byFreq.A).push(o);});
     var renderObligations=function(freq,title){
       return '<div class="sec-title">'+title+'</div><div class="ob-grid">'+byFreq[freq].map(function(o){
-        return '<label class="ob-item"><input type="checkbox" class="client-obligation" data-k="'+esc(o.k)+'" '+(clientObligationEnabled(c,o)?'checked':'')+'> '+esc(o.n)+'</label>';
+        return '<label class="ob-item"><input type="checkbox" class="client-obligation" data-k="'+esc(o.k)+'" '+(clientObligationEnabled(c,o)?'checked':'')+' '+(isAdmin?'':'disabled')+'> '+esc(o.n)+'</label>';
       }).join('')+'</div>';
     };
-    content='<p class="sm">Marca solo las obligaciones que correspondan a este cliente. Los cambios afectan el control mensual y anual.</p>'+
+    content='<p class="sm">Obligaciones asignadas al cliente.</p>'+
       renderObligations('P','Mensuales')+renderObligations('S','Semestrales')+renderObligations('A','Anuales')+
-      '<div class="actions"><button class="btn pri" data-a="saveClientObligations" data-id="'+id+'">Guardar obligaciones</button></div>';
+      (isAdmin ? '<div class="actions"><button class="btn pri" data-a="saveClientObligations" data-id="'+id+'">Guardar obligaciones</button></div>' : '');
   }else if(CLIENTE_FICHA.tab==='claves'){
     var meta=S.boveda.meta;
     if(!meta){
@@ -869,13 +837,13 @@ function renderClientProfile(id,tab){
       content='<div class="card"><b>🔒 Desbloquear claves</b><p class="sm">Ingresa la clave maestra para ver o editar las credenciales.</p><div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password" autocomplete="current-password"></label></div></div><div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
     }else{
       var entries=getClientCredentialEntries(id);
-      content='<div class="vault-toolbar"><div><b>🔒 Credenciales</b><div class="sm">Cifradas en la bóveda de la organización</div></div><div class="vault-actions"><button class="btn pri" data-a="nuevaClave" data-cid="'+id+'">+ Agregar clave</button><button class="btn sm" data-a="lockClientVault">Bloquear</button></div></div>'+
+      content='<div class="vault-toolbar"><div><b>🔒 Credenciales</b><div class="sm">Cifradas en la bóveda de la organización</div></div><div class="vault-actions">'+(isAdmin?'<button class="btn pri" data-a="nuevaClave" data-cid="'+id+'">+ Agregar clave</button>':'')+'<button class="btn sm" data-a="lockClientVault">Bloquear</button></div></div>'+
         (entries.length?'<div class="vault-grid">'+entries.map(function(entry){
           var item=entry.item,idx=entry.idx;
           return '<article class="vault-credential">'+
-            '<div class="vault-credential-head"><span class="chip info">'+esc(item.servicio||'Servicio')+'</span><div class="vault-actions"><button class="btn sm" data-a="editClave" data-i="'+idx+'" aria-label="Editar credencial">✏️</button><button class="btn sm danger" data-a="delClave" data-i="'+idx+'" aria-label="Eliminar credencial">🗑️</button></div></div>'+
+            '<div class="vault-credential-head"><span class="chip info">'+esc(item.servicio||'Servicio')+'</span>'+(isAdmin?'<div class="vault-actions"><button class="btn sm" data-a="editClave" data-i="'+idx+'">✏️</button><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">🗑️</button></div>':'')+'</div>'+
             '<div class="vault-field">Usuario<strong>'+esc(item.usuario)+'</strong></div>'+
-            '<div class="vault-field">Clave del sitio<div class="vault-secret"><input type="password" value="'+esc(item.clave)+'" readonly id="vp_'+idx+'" aria-label="Clave del sitio"><button class="btn sm" data-a="showPass" data-i="'+idx+'" aria-label="Mostrar u ocultar clave">👁</button></div></div>'+
+            '<div class="vault-field">Clave del sitio<div class="vault-secret"><input type="password" value="'+esc(item.clave)+'" readonly id="vp_'+idx+'"><button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></div></div>'+
             '</article>';
         }).join('')+'</div>':'<div class="empty">Este cliente todavía no tiene claves guardadas.</div>');
     }
@@ -900,12 +868,24 @@ function vGrupos(){
     (Object.keys(grp).length?Object.entries(grp).map(function(pair){ return '<div style="margin-top:10px"><b>'+esc(pair[0])+'</b> ('+pair[1].length+' empresas)'+pair[1].map(function(c){ return '<div class="sm">• '+esc(c.nombre)+'</div>'; }).join('')+'</div>'; }).join(''):'<div class="empty">No hay grupos.</div>')+'</div>';
 }
 
+/* VISTA DE GESTIÓN DE USUARIOS Y ROLES */
+function vUsuarios(){
+  var users = usuariosList();
+  return '<div class="bar"><button class="btn pri" data-a="nuevoUsuario">+ Nuevo Usuario</button></div>'+
+  '<div class="card">'+
+    '<b>👤 Usuarios del Sistema y Roles</b>'+
+    '<p class="sm" style="margin-bottom:12px">Los usuarios con rol <b>ADMIN</b> tienen acceso completo. Los usuarios <b>OPERADOR</b> solo pueden ver y gestionar el control de obligaciones.</p>'+
+    '<div class="tablewrap"><table style="min-width:600px">'+
+      '<thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+users.map(function(u){
+        return '<tr><td><b>'+esc(u.username)+'</b></td><td>'+esc(u.nombre)+'</td><td><span class="chip '+(u.rol==='ADMIN'?'ok':'info')+'">'+esc(u.rol)+'</span></td>'+
+          '<td><button class="btn sm" data-a="editUsuario" data-id="'+u.id+'">Editar</button> '+(u.username!=='admin'?'<button class="btn sm danger" data-a="delUsuario" data-id="'+u.id+'">Eliminar</button>':'')+'</td></tr>';
+      }).join('')+'</tbody></table></div></div>';
+}
+
 function vAjustes(){
-  var enabled=gateEnabled();
-  return '<div class="card" style="max-width:600px"><b>Seguridad</b><p class="sm">Clave de acceso compartida entre dispositivos cuando la bitácora está sincronizada. Se guarda como verificador cifrado, no como texto legible.</p>'+
-    '<div class="sm" style="margin-bottom:8px">Estado: '+(enabled?'🔒 Acceso protegido':'⚠️ Sin clave configurada')+'</div>'+
-    '<div class="fgrid"><div class="full"><label>'+(enabled?'Cambiar clave de acceso':'Crear clave de acceso')+'<input type="password" id="set_gate_pass" placeholder="'+(enabled?'Deja vacío para conservar la clave actual':'Mínimo 6 caracteres')+'" autocomplete="new-password"></label></div></div>'+
-    '<div class="actions" style="margin-top:12px"><button class="btn pri" data-a="saveGatePass">Guardar clave</button>'+(enabled?' <button class="btn danger" data-a="removeGatePass">Quitar clave</button> <button class="btn danger" data-a="lockApp">🔒 Cerrar sesión ahora</button>':'')+'</div></div>'+
+  return '<div class="card" style="max-width:600px"><b>Cuenta Actual</b><p class="sm">Usuario activo: <b>'+esc(CURRENT_USER.username)+'</b> ('+esc(CURRENT_USER.nombre)+')</p>'+
+    '<div class="actions"><button class="btn danger" data-a="logoutUser">🔒 Cerrar sesión</button></div></div>'+
   '<div class="card" style="max-width:600px;border-left:4px solid var(--bad)"><b style="color:var(--bad)">⚠️ Mantenimiento</b>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
       '<button class="btn info" data-a="descargarRespaldoManual">📥 Descargar Respaldo</button>'+
@@ -919,6 +899,18 @@ function vAjustes(){
 function openModal(html,wide){ $('#modal').innerHTML='<div class="bg" data-a="bgclose"><div class="box '+(wide?'wide':'')+'">'+html+'</div></div>'; }
 function closeModal(){ $('#modal').innerHTML=''; }
 function val(id){ var e=document.getElementById(id); return e?e.value:''; }
+
+function modalUsuario(id){
+  var u = id ? S.usuarios[id] : {username:'', nombre:'', pass:'', rol:'OPERADOR'};
+  openModal('<h2>'+(id?'Editar':'Nuevo')+' Usuario</h2>'+
+  '<div class="fgrid">'+
+    '<div><label>Usuario (Username)<input id="mu_user" value="'+esc(u.username)+'" '+(id&&u.username==='admin'?'readonly':'')+'></label></div>'+
+    '<div><label>Nombre Completo<input id="mu_nombre" value="'+esc(u.nombre)+'"></label></div>'+
+    '<div><label>Contraseña<input id="mu_pass" type="password" value="'+esc(u.pass)+'"></label></div>'+
+    '<div><label>Rol<select id="mu_rol"><option value="ADMIN" '+(u.rol==='ADMIN'?'selected':'')+'>Administrador</option><option value="OPERADOR" '+(u.rol==='OPERADOR'?'selected':'')+'>Operador (Limitado)</option></select></label></div>'+
+  '</div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveUsuario" data-id="'+(id||'')+'">Guardar</button></div>');
+}
 
 function modalNotifCobro(cid){
   var c = S.clientes[cid] || {nombre: 'Cliente', ruc: '', celular: ''};
@@ -1049,11 +1041,10 @@ function modalAnDist(cid, y, mNum){
   (sItemsInMonth.length?'<b>Semestrales:</b><div class="obs" style="margin:6px 0 12px">'+sItemsInMonth.map(function(o){ var isS1 = (o.m === 7 || o.k.includes('SEM1')); var targetAv = isS1 ? sAv1 : sAv2; var targetKey = isS1 ? (y + '-S1') : (y + '-S2'); return '<button class="ob '+(targetAv.done&&targetAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+targetKey+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   (aItemsInMonth.length?'<b>Anuales:</b><div class="obs" style="margin:6px 0 12px">'+aItemsInMonth.map(function(o){ return '<button class="ob '+(aAv.done&&aAv.done[o.k]?'done':'')+'" data-a="toggle" data-c="'+cid+'" data-k="'+y+'" data-m="'+mNum+'" data-o="'+o.k+'">'+esc(o.n)+'</button>'; }).join('')+'</div>':'')+
   '<hr style="border:0;border-top:1px solid var(--line);margin:12px 0"><div style="display:flex;justify-content:space-between;align-items:center">'+
-    (c.cobra !== false ? (yaExiste ? '<span class="chip ok">✓ Cuenta ya generada</span>' : '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-con="'+esc(conceptoAuto)+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>') : '<span></span>')+
+    (c.cobra !== false && CURRENT_USER.rol==='ADMIN' ? (yaExiste ? '<span class="chip ok">✓ Cuenta ya generada</span>' : '<button class="btn sm pri" data-a="crearCobroDesdeModal" data-c="'+cid+'" data-con="'+esc(conceptoAuto)+'" data-fec="'+fechaSugeridaStr+'">+ Generar cuenta por cobrar</button>') : '<span></span>')+
     '<button class="btn" data-a="close">Listo</button></div>');
 }
 
-/* ============ MODALES: RESTAURAR E IMPORTAR ============ */
 function modalRestaurar(){
   openModal('<h2>📤 Restaurar Respaldo</h2>'+
     '<p class="sm">Selecciona un archivo JSON de respaldo generado previamente. <b>Esto sobrescribirá todos los datos actuales.</b></p>'+
@@ -1069,10 +1060,9 @@ function modalImportarExcel(){
     '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="ejecutarImportarExcel">Importar Clientes</button></div>');
 }
 
-/* ============ IMPRESIÓN ============ */
+/* IMPRESIÓN */
 function imprimirReciboCobro(id){
   var x = S.cobros[id]; if(!x) return; var c = S.clientes[x.clienteId] || {nombre:'Cliente', ruc:'N/A'}; var calc = cobroCalc(x);
-  // ✅ FIX: protege x.abonos undefined
   var abonos = x.abonos || [];
   var ultAbono = abonos.length ? abonos[abonos.length-1] : {f:x.fechaEmision, metodo:'Efectivo', ref:'N/A'};
   var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+String(id).slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(ultAbono.f||x.fechaEmision)+'</div></div></div>'+
@@ -1101,7 +1091,6 @@ function imprimirEstadoCuenta(cid){
 
 function imprimirReciboMultiple(rid){
   var r = S.recibos[rid]; if(!r) return; var c = S.clientes[r.clienteId] || {nombre:'Cliente', ruc:'N/A'};
-  // ✅ FIX: protege r.detalles undefined
   var detalles = r.detalles || [];
   var html = '<div class="print-card"><div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f6b6b;padding-bottom:8px;margin-bottom:12px"><div><h1 style="margin:0;font-size:20px;color:#0f6b6b;letter-spacing:1px">ASECONTRIL</h1><div style="font-size:11px;color:#333;font-weight:bold">Asesoría Contable</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:bold;color:#000">RECIBO N.° '+String(r.id).slice(-6).toUpperCase()+'</div><div style="font-size:11px;color:#000">Fecha: '+fmtDate(r.fecha)+'</div></div></div>'+
     '<table style="width:100%;margin-bottom:12px;font-size:11px;border:none"><tr><td style="padding:2px 0;border:none"><strong>CLIENTE:</strong> '+esc(c.nombre)+'</td><td style="padding:2px 0;border:none"><strong>RUC:</strong> '+esc(c.ruc)+'</td></tr><tr><td style="padding:2px 0;border:none"><strong>PAGO:</strong> '+esc(r.metodoPago||'Efectivo')+'</td><td style="padding:2px 0;border:none"><strong>REF:</strong> '+esc(r.referencia||'N/A')+'</td></tr></table>'+
@@ -1113,55 +1102,48 @@ function imprimirReciboMultiple(rid){
   $('#print-area').innerHTML = html; window.print();
 }
 
-/* ============ EVENTOS ============ */
+/* ============ EVENTOS Y ACCIONES ============ */
 var ACT={
   tab:function(d){UI.tab=d.k; render(); document.querySelector('.sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('open');},
   ctype:function(d){UI.ctype=d.k; UI.cper=defaultPeriod(d.k); render();},
   ayShift:function(d){UI.ay+=+d.dir; render();},
-  loginGate:async function(){
-    var pass=val('g_pass_input'),config=gateCfg(),valid=false;
-    if(config) valid=await verifyGatePassword(pass,config);
-    else valid=pass===legacyGateCfg();
-    if(valid){GATE.logged=true;render();}
-    else toast('Contraseña incorrecta');
-  },
-  lockApp:function(){
-    if(!gateEnabled()){UI.tab='ajustes';render();toast('Configura primero una clave de acceso');return;}
-    GATE.logged=false; VAULT.key=null; VAULT.data=[]; CLIENTE_FICHA.id=''; closeModal(); render(); toast('Sesión cerrada');
-  },
-  saveGatePass:async function(){
-    var pass=val('set_gate_pass').trim();
-    if(!pass){toast('Escribe una nueva clave; deja el campo vacío para conservar la actual');return;}
-    if(pass.length<6){toast('Clave mínima de 6 caracteres');return;}
-    try{
-      if(Store.db){
-        var config=await createGateConfig(pass);
-        await Store.db.doc('config/accessGate').set(config);
-        S.config.accessGate=config;
-        try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
-      }else{
-        localStorage.setItem('bitacora_gate_pass',pass);
-      }
-      GATE.logged=true;render();toast('Clave de acceso guardada');
-    }catch(error){
-      console.error('Error al guardar la clave de acceso:',error);
-      toast('No se pudo guardar la clave. Revisa la conexión e inténtalo otra vez.');
+  loginUser:function(){
+    var username = val('g_user_input').trim();
+    var pass = val('g_pass_input').trim();
+    if(!username || !pass){ toast('Ingresa usuario y contraseña'); return; }
+    var users = usuariosList();
+    var match = users.find(function(u){ return u.username.toLowerCase() === username.toLowerCase() && u.pass === pass; });
+    if(match){
+      CURRENT_USER = match;
+      render();
+      toast('Bienvenido(a), ' + CURRENT_USER.nombre);
+    } else {
+      toast('Usuario o contraseña incorrectos');
     }
   },
-  removeGatePass:async function(){
-    try{
-      if(Store.db&&gateCfg()){
-        await Store.db.doc('config/accessGate').delete();
-        delete S.config.accessGate;
-      }
-      try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
-      GATE.logged=true;render();toast('Clave de acceso removida');
-    }catch(error){
-      console.error('Error al quitar la clave de acceso:',error);
-      toast('No se pudo quitar la clave. Revisa la conexión e inténtalo otra vez.');
-    }
+  logoutUser:function(){
+    CURRENT_USER = null;
+    VAULT.key = null;
+    VAULT.data = [];
+    CLIENTE_FICHA.id = '';
+    closeModal();
+    render();
+    toast('Sesión cerrada');
   },
-  securitySettings:function(){UI.tab='ajustes';render();},
+  nuevoUsuario:function(){ modalUsuario(null); },
+  editUsuario:function(d){ modalUsuario(d.id); },
+  delUsuario:async function(d){
+    var u = S.usuarios[d.id];
+    if(u && u.username === 'admin'){ toast('No se puede eliminar el usuario principal'); return; }
+    if(confirm('¿Eliminar este usuario?')){ await Store.del('usuarios', d.id); toast('Usuario eliminado'); }
+  },
+  saveUsuario:async function(d){
+    var user = val('mu_user').trim(), nombre = val('mu_nombre').trim(), pass = val('mu_pass').trim(), rol = val('mu_rol');
+    if(!user || !nombre || !pass){ toast('Completa todos los campos'); return; }
+    var newId = d.id || ('usr_' + uid());
+    await Store.put('usuarios', newId, {username: user, nombre: nombre, pass: pass, rol: rol});
+    closeModal(); toast('Usuario guardado');
+  },
   reloadApp:function(){location.reload();},
   openClientProfile:function(d){ VAULT.key=null; VAULT.data=[]; renderClientProfile(d.id,'resumen'); },
   cancelClientEdit:function(d){ if(CLIENTE_FICHA.id) renderClientProfile(d.id||CLIENTE_FICHA.id,'resumen'); else closeModal(); },
@@ -1223,7 +1205,6 @@ var ACT={
     await Store.put('avances',id,av);
     var c = S.clientes[d.c];
     if(c && c.cobra !== false && c.tarifa > 0){
-      // ✅ FIX: usar mNumFromKey para no producir NaN con claves semestrales
       var mNum = d.m ? Number(d.m) : mNumFromKey(d.k);
       var yYear = UI.ay;
       var mItems = oblFor(c, 'M'); var mAv = avanceOf(d.c, monthKey(yYear, mNum));
@@ -1250,7 +1231,6 @@ var ACT={
   },
   nuevoCobro:function(){ modalCobro(null, '', ''); },
   crearCobroDesdeModal:function(d){ modalCobro(d.c, d.con, d.fec); },
-  // ✅ FIX: un solo uid() para id y para campo id (antes se desincronizaban)
   saveCobro:async function(){
     var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
     if(!clienteId||!concepto||!monto){toast('Completa los campos');return;}
@@ -1355,7 +1335,6 @@ var ACT={
   saveCliente:async function(d){
     var nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim(); if(!nombre||!ruc){toast('Llena nombre y RUC');return;}
     var oblMap = {}; document.querySelectorAll('.chk-obl').forEach(function(chk){ oblMap[chk.dataset.k] = chk.checked; });
-    // ✅ FIX: se eliminó cobroFreq (no existe el input); se usa 'M' por defecto
     var c={nombre:nombre,ruc:ruc,celular:val('m_celular').trim(),tipo:val('m_tipo'),grupo:val('m_grupo').trim(),activo: val('m_activo') === 'true',cobra: val('m_cobra') === 'true',tarifa: +val('m_tarifa') || 0,cobroFreq:'M',doc: val('m_doc'),obl: oblMap};
     var id=d.id||('c'+ruc);
     await Store.put('clientes',id,c);
@@ -1365,7 +1344,6 @@ var ACT={
   },
   anCellDist:function(d){ modalAnDist(d.c, +d.y, +d.m); },
   close:function(){ closeModal(); },
-  // ✅ FIX: protege e.target sin classList
   bgclose:function(d,e){ if(e && e.target && e.target.classList && e.target.classList.contains('bg')){CLIENTE_FICHA.id='';VAULT.key=null;VAULT.data=[];closeModal();} }
 };
 
