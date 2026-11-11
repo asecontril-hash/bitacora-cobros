@@ -35,7 +35,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-ap
 
 /* LAYOUT CON MENÚ LATERAL */
 .layout{display:flex;flex:1;min-height:100vh}
-.sidebar{width:250px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:15px 10px;flex-shrink:0;transition:transform .3s ease;z-index:40}
+.sidebar{width:250px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:15px 10px;flex-shrink:0;transition:transform .3s ease;z-index:40;overflow-y:auto}
 .sidebar h1{font-size:18px;margin:0 0 20px 10px;color:var(--pri);display:flex;align-items:center;gap:8px}
 .sidebar h1 span{font-size:14px;color:var(--mut);font-weight:normal;display:block;margin-top:2px}
 .menu-btn{background:none;border:0;padding:10px 12px;border-radius:8px;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;margin-bottom:4px;transition:background .2s}
@@ -126,6 +126,28 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 .progress-bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:4px;width:100px}
 .progress-fill{height:100%;background:var(--pri);width:0%;transition:width .3s}
 
+/* BÓVEDA DE CLAVES */
+.vault-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.vault-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px}
+.vault-client{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.vault-client-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.vault-client-name{font-weight:700;overflow-wrap:anywhere}
+.vault-count{color:var(--mut);font-size:12px;white-space:nowrap}
+.vault-credential{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:11px;margin-top:8px}
+.vault-credential-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.vault-actions{display:flex;gap:5px;flex-shrink:0}
+.vault-field{font-size:12px;color:var(--mut);margin-top:7px}
+.vault-field strong{display:block;color:var(--ink);font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.vault-secret{display:flex;align-items:center;gap:6px;margin-top:3px}
+.vault-secret input{flex:1;width:100%;font-family:monospace}
+.client-profile-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.client-profile-tabs{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line);margin:14px 0;padding-bottom:8px}
+.client-profile-tab{white-space:nowrap}
+.client-profile-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.client-profile-summary>div{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px}
+.client-profile-summary span{display:block;color:var(--mut);font-size:12px}
+.client-profile-summary strong{display:block;overflow-wrap:anywhere}
+
 /* IMPRESIÓN */
 #print-area { display: none; }
 @page { size: A4 portrait; margin: 10mm; }
@@ -167,6 +189,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 
 <header class="header-movil">
   <h1>📒 ASECONTRIL</h1>
+  <button class="btn-menu-movil" id="mobile-logout" data-a="lockApp" title="Cerrar sesión" aria-label="Cerrar sesión" style="display:none;font-size:15px">🔒 Salir</button>
   <button class="btn-menu-movil" onclick="document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.overlay').classList.toggle('open');">☰</button>
 </header>
 
@@ -202,13 +225,43 @@ var DEFAULT_OBL=[
 var DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-var GATE={logged:false};
-function gateCfg(){return localStorage.getItem('bitacora_gate_pass')||''}
+var GATE={logged:false,migrationStarted:false};
+function legacyGateCfg(){try{return localStorage.getItem('bitacora_gate_pass')||'';}catch(e){return '';}}
+function gateCfg(){return S.config&&S.config.accessGate?S.config.accessGate:null;}
+function gateEnabled(){return !!gateCfg()||!!legacyGateCfg();}
+async function createGateConfig(pass){
+  var salt=crypto.getRandomValues(new Uint8Array(16)),iter=150000,key=await deriveKey(pass,salt,iter);
+  return {salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA_ACCESS'})};
+}
+async function verifyGatePassword(pass,config){
+  try{
+    var key=await deriveKey(pass,unb64(config.salt),config.iter);
+    var check=await decJSON(key,config.check);
+    return check.ok==='BITACORA_ACCESS';
+  }catch(e){return false;}
+}
+async function migrateLegacyGate(){
+  var legacy=legacyGateCfg();
+  if(!Store.db||gateCfg()||!legacy||GATE.migrationStarted) return;
+  GATE.migrationStarted=true;
+  try{
+    var config=await createGateConfig(legacy);
+    await Store.db.doc('config/accessGate').set(config);
+    S.config.accessGate=config;
+    try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
+    render();
+  }catch(error){
+    GATE.migrationStarted=false;
+    console.error('No se pudo sincronizar la clave de acceso:',error);
+    toast('La clave sigue guardada en este dispositivo; no se pudo sincronizar.');
+  }
+}
 
-var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},ready:false,kind:'…'};
+var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},ready:false,configReady:false,configError:false,kind:'…'};
 var loaded={};
 var now=new Date();
 var UI={ ay:new Date().getFullYear(), tab:'panel', ctype:'M', cper:null, q_cli:'', q_ctrl:'', q_anual:'', fgr:'todos', ordenAnual:'alfabetico', q_cobros:'', fgr_cobros:'todos' };
+var CLIENTE_FICHA={id:'',tab:'resumen'};
 
 function getOblList(){
   var dict = {};
@@ -348,6 +401,11 @@ function oblFor(c, t){
     return false;
   });
 }
+function clientObligationEnabled(c,o){
+  if(c.obl&&c.obl[o.k]===false) return false;
+  if(c.obl&&c.obl[o.k]===true) return true;
+  return o.k!=='SUPERCIAS'||c.tipo==='SOCIEDAD';
+}
 function avanceOf(cid,k){ return S.avances[cid+'__'+k]||{done:{}}; }
 function rowsFor(t,k){
   return activos().map(function(c){
@@ -383,11 +441,16 @@ var Store={
         dbConn.collection(col).onSnapshot(function(snap){
           var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
           S[col]=o; loaded[col]=true;
-          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
-        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); } });
+          if(col==='config'){
+            S.configReady=true;S.configError=false;
+            if(S.config.accessGate&&legacyGateCfg()){try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}}
+          }
+          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); migrateLegacyGate(); }
+        }, function(err){ loaded[col]=true; if(col==='config'){S.configReady=true;S.configError=true;console.error('No se pudo verificar la configuración de acceso:',err);} if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); } });
       });
     }else{
       S.kind='local';
+      S.configReady=true;
       try{ var raw=localStorage.getItem('bitacora_v1'); if(raw){ var d=JSON.parse(raw); COLS.forEach(function(c){ S[c]=d[c]||{}; }); } }catch(e){}
       S.ready=true; render();
     }
@@ -447,10 +510,29 @@ async function loadVaultItems(){ if(!VAULT.key||!S.boveda.items) { VAULT.data = 
 async function saveVaultItems(){ if(!VAULT.key) return; var enc = await encJSON(VAULT.key, VAULT.data); await Store.put('boveda', 'items', enc); }
 
 /* ============ VISTAS ============ */
-var TABS=[['panel','📊 Dashboard'],['control','📋 Control obligaciones'],['anual','📅 Resumen anual'],['cobros','💰 Cuentas por Cobrar'],['clientes','👥 Clientes'],['grupos','🏢 Grupos y referidos'],['catObl','⚙️ Catálogo obligaciones'],['claves','🔒 Claves'],['ajustes','🛠️ Ajustes']];
+var TABS=[['panel','📊 Dashboard'],['control','📋 Control obligaciones'],['anual','📅 Resumen anual'],['cobros','💰 Cuentas por Cobrar'],['clientes','👥 Clientes'],['grupos','🏢 Grupos y referidos'],['catObl','⚙️ Catálogo obligaciones'],['ajustes','🛠️ Ajustes']];
 
 function render(){
-  var cfgPass = gateCfg();
+  var cfgPass = gateEnabled();
+  var mobileLogout=$('#mobile-logout');
+  if(mobileLogout){
+    var appReady=S.ready&&(!Store.db||S.configReady);
+    mobileLogout.style.display=appReady&&(!cfgPass||GATE.logged)?'inline-flex':'none';
+    mobileLogout.dataset.a=cfgPass?'lockApp':'securitySettings';
+    mobileLogout.textContent=cfgPass?'🔒 Salir':'🔐 Acceso';
+    mobileLogout.title=cfgPass?'Cerrar sesión':'Configurar clave de acceso';
+    mobileLogout.setAttribute('aria-label',cfgPass?'Cerrar sesión':'Configurar clave de acceso');
+  }
+  if(Store.db&&!S.configReady&&!legacyGateCfg()){
+    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
+    $('#main').innerHTML='<div class="empty">Verificando configuración de acceso…</div>';
+    return;
+  }
+  if(Store.db&&S.configError&&!legacyGateCfg()){
+    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
+    $('#main').innerHTML='<div class="card"><b>No se pudo verificar el acceso</b><p class="sm">La aplicación no abrirá los datos hasta confirmar si existe una clave principal. Revisa la conexión y recarga.</p><button class="btn pri" data-a="reloadApp">Reintentar</button></div>';
+    return;
+  }
   if(cfgPass && !GATE.logged){
     $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
     $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
@@ -461,12 +543,12 @@ function render(){
   }
   if(!S.ready){ $('#main').innerHTML='<div class="empty">Cargando…</div>'; return; }
 
-  var lockBtn = cfgPass ? '<button class="menu-btn" data-a="lockApp" style="margin-top:auto;color:var(--bad)">🔒 Cerrar sesión</button>' : '';
+  var lockBtn = cfgPass ? '<button class="menu-btn" data-a="lockApp" style="margin-top:auto;color:var(--bad)">🔒 Cerrar sesión</button>' : '<button class="menu-btn" data-a="securitySettings" style="margin-top:auto;color:var(--pri)">🔐 Configurar acceso</button>';
   $('#sidebar').innerHTML='<h1>📒 ASECONTRIL <span>Bitácora Contable</span></h1>'+
     TABS.map(function(pair){ return '<button class="menu-btn '+(UI.tab===pair[0]?'on':'')+'" data-a="tab" data-k="'+pair[0]+'">'+pair[1]+'</button>'; }).join('')+
     '<div style="margin-top:auto;padding:10px;font-size:11px;color:var(--mut);text-align:center">'+(S.kind==='nube'?'☁️ Sincronizado':'💾 Local')+'</div>'+lockBtn;
 
-  var v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,claves:vClaves,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
+  var v={panel:vPanel,control:vControl,anual:vAnual,catObl:vCatObl,cobros:vCobros,clientes:vClientes,grupos:vGrupos,ajustes:vAjustes}[UI.tab];
   $('#main').innerHTML=v();
 }
 
@@ -669,22 +751,6 @@ function vCatObl(){
       }).join('')+'</tbody></table></div></div>';
 }
 
-function vClaves(){
-  var meta=S.boveda.meta;
-  if(!meta) return '<div class="card" style="max-width:500px"><b>🔒 Crear Bóveda</b><p class="sm">Ingresa una clave maestra para cifrar las contraseñas.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vSetup">Crear Bóveda</button></div></div>';
-  if(!VAULT.key) return '<div class="card" style="max-width:500px"><b>🔒 Abrir Bóveda</b><p class="sm">Ingresa tu clave maestra.</p><div class="fgrid"><div class="full"><label>Clave Maestra<input id="v_pass" type="password"></label></div></div><div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
-  return '<div class="card">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b>🔒 Bóveda de Claves Cifradas</b><button class="btn danger sm" data-a="vLock">Bloquear</button></div>'+
-    '<div class="bar"><button class="btn pri" data-a="nuevaClave">+ Nueva Credencial</button></div>'+
-    (VAULT.data.length ? '<div class="tablewrap"><table style="min-width:650px">'+
-      '<thead><tr><th>Cliente</th><th>Servicio</th><th>Usuario / RUC</th><th>Clave / Pin</th><th>Acciones</th></tr></thead>'+
-      '<tbody>'+VAULT.data.map(function(item, idx){
-        return '<tr><td><b>'+esc(item.cliente)+'</b></td><td><span class="chip info">'+esc(item.servicio)+'</span></td><td>'+esc(item.usuario)+'</td>'+
-          '<td><input type="password" value="'+esc(item.clave)+'" readonly style="border:none;background:none;width:120px;font-family:monospace" id="vp_'+idx+'"> <button class="btn sm" data-a="showPass" data-i="'+idx+'">👁</button></td>'+
-          '<td><button class="btn sm danger" data-a="delClave" data-i="'+idx+'">Eliminar</button></td></tr>';
-      }).join('')+'</tbody></table></div>' : '<div class="empty">No hay claves guardadas.</div>')+'</div>';
-}
-
 function vCobros(){
   var rawList = cobrosList().filter(function(x){ return !x.anulado; });
   var porCliente = {};
@@ -741,7 +807,8 @@ function vCobros(){
 
 function vClientes(){
   var L=clientesList().filter(function(c){ return matchesQ(c, UI.q_cli); });
-  return '<div class="bar"><button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button>'+ searchInput('q_cli', UI.q_cli)+'</div>'+
+  return '<div class="bar"><button class="btn pri" data-a="nuevoCliente">+ Nuevo cliente</button><button class="btn danger" data-a="clearClientObligations">⏸ Dejar todos sin obligaciones</button>'+ searchInput('q_cli', UI.q_cli)+'</div>'+
+  '<p class="sm">Abre la ficha de cada cliente para revisar sus datos, obligaciones y claves.</p>'+
   '<div class="card">'+
   (L.length?'<div class="tablewrap"><table>'+
     '<thead><tr><th>Cliente</th><th>RUC</th><th>Celular</th><th>Tipo</th><th>Cobro</th><th>Estado</th><th>Acciones</th></tr></thead>'+
@@ -750,9 +817,71 @@ function vClientes(){
       return '<tr><td><div class="nm">'+esc(c.nombre)+'</div>'+tagsCli(c)+'</td><td>'+esc(c.ruc)+'</td><td><b>'+(esc(c.celular)||'—')+'</b></td><td>'+esc(c.tipo)+'</td>'+
         '<td><b>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</b></td>'+
         '<td>'+(isAct ? '<span class="chip ok">Activo</span>' : '<span class="chip warn">⏸ Suspendido</span>')+'</td>'+
-        '<td><button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button> <button class="btn sm '+(isAct?'danger':'pri')+'" data-a="toggleSuspend" data-id="'+c.id+'">'+(isAct?'⏸ Suspender':'▶ Activar')+'</button></td></tr>';
+        '<td><button class="btn sm pri" data-a="openClientProfile" data-id="'+c.id+'">Ficha</button> <button class="btn sm" data-a="editCliente" data-id="'+c.id+'">Editar</button> <button class="btn sm '+(isAct?'danger':'pri')+'" data-a="toggleSuspend" data-id="'+c.id+'">'+(isAct?'⏸ Suspender':'▶ Activar')+'</button></td></tr>';
     }).join('')+'</tbody></table></div>':'<div class="empty">Aún no hay clientes.</div>')+
   '</div>';
+}
+
+function renderClientProfile(id,tab){
+  var c=S.clientes[id];
+  if(!c){ CLIENTE_FICHA.id=''; closeModal(); toast('No se encontró el cliente'); return; }
+  CLIENTE_FICHA.id=id; CLIENTE_FICHA.tab=tab||'resumen';
+  var obl=getOblList();
+  var selected=obl.filter(function(o){return clientObligationEnabled(c,o);}).length;
+  var nav=[['resumen','Resumen'],['obligaciones','Obligaciones'],['claves','Claves']];
+  var content='';
+  if(CLIENTE_FICHA.tab==='resumen'){
+    content='<div class="client-profile-summary">'+
+      '<div><span>RUC</span><strong>'+esc(c.ruc||'—')+'</strong></div>'+
+      '<div><span>Celular</span><strong>'+esc(c.celular||'—')+'</strong></div>'+
+      '<div><span>Tipo</span><strong>'+esc(c.tipo||'—')+'</strong></div>'+
+      '<div><span>Grupo</span><strong>'+esc(c.grupo||'Sin grupo')+'</strong></div>'+
+      '<div><span>Estado</span><strong>'+(c.activo===false?'Suspendido':'Activo')+'</strong></div>'+
+      '<div><span>Cobro</span><strong>'+(c.cobra!==false?money(c.tarifa||0):'No aplica')+'</strong></div>'+
+      '<div><span>Obligaciones asignadas</span><strong>'+selected+' / '+obl.length+'</strong></div>'+
+      '<div><span>Claves guardadas</span><strong>'+(VAULT.key?getClientCredentialEntries(id).length:(S.boveda.items?'Bloqueadas':'0'))+'</strong></div>'+
+      '</div><div class="actions"><button class="btn" data-a="editCliente" data-id="'+id+'">Editar datos generales</button></div>';
+  }else if(CLIENTE_FICHA.tab==='obligaciones'){
+    var byFreq={P:[],S:[],A:[]};
+    obl.forEach(function(o){(byFreq[o.f]||byFreq.A).push(o);});
+    var renderObligations=function(freq,title){
+      return '<div class="sec-title">'+title+'</div><div class="ob-grid">'+byFreq[freq].map(function(o){
+        return '<label class="ob-item"><input type="checkbox" class="client-obligation" data-k="'+esc(o.k)+'" '+(clientObligationEnabled(c,o)?'checked':'')+'> '+esc(o.n)+'</label>';
+      }).join('')+'</div>';
+    };
+    content='<p class="sm">Marca solo las obligaciones que correspondan a este cliente. Los cambios afectan el control mensual y anual.</p>'+
+      renderObligations('P','Mensuales')+renderObligations('S','Semestrales')+renderObligations('A','Anuales')+
+      '<div class="actions"><button class="btn pri" data-a="saveClientObligations" data-id="'+id+'">Guardar obligaciones</button></div>';
+  }else if(CLIENTE_FICHA.tab==='claves'){
+    var meta=S.boveda.meta;
+    if(!meta){
+      content='<div class="card"><b>🔒 Crear bóveda de claves</b><p class="sm">La clave maestra protege todas las credenciales de los clientes.</p><div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password" autocomplete="new-password"></label></div></div><div class="actions"><button class="btn pri" data-a="vSetup">Crear bóveda</button></div></div>';
+    }else if(!VAULT.key){
+      content='<div class="card"><b>🔒 Desbloquear claves</b><p class="sm">Ingresa la clave maestra para ver o editar las credenciales.</p><div class="fgrid"><div class="full"><label>Clave maestra<input id="v_pass" type="password" autocomplete="current-password"></label></div></div><div class="actions"><button class="btn pri" data-a="vUnlock">Desbloquear</button></div></div>';
+    }else{
+      var entries=getClientCredentialEntries(id);
+      content='<div class="vault-toolbar"><div><b>🔒 Credenciales</b><div class="sm">Cifradas en la bóveda de la organización</div></div><div class="vault-actions"><button class="btn pri" data-a="nuevaClave" data-cid="'+id+'">+ Agregar clave</button><button class="btn sm" data-a="lockClientVault">Bloquear</button></div></div>'+
+        (entries.length?'<div class="vault-grid">'+entries.map(function(entry){
+          var item=entry.item,idx=entry.idx;
+          return '<article class="vault-credential">'+
+            '<div class="vault-credential-head"><span class="chip info">'+esc(item.servicio||'Servicio')+'</span><div class="vault-actions"><button class="btn sm" data-a="editClave" data-i="'+idx+'" aria-label="Editar credencial">✏️</button><button class="btn sm danger" data-a="delClave" data-i="'+idx+'" aria-label="Eliminar credencial">🗑️</button></div></div>'+
+            '<div class="vault-field">Usuario<strong>'+esc(item.usuario)+'</strong></div>'+
+            '<div class="vault-field">Clave del sitio<div class="vault-secret"><input type="password" value="'+esc(item.clave)+'" readonly id="vp_'+idx+'" aria-label="Clave del sitio"><button class="btn sm" data-a="showPass" data-i="'+idx+'" aria-label="Mostrar u ocultar clave">👁</button></div></div>'+
+            '</article>';
+        }).join('')+'</div>':'<div class="empty">Este cliente todavía no tiene claves guardadas.</div>');
+    }
+  }
+  openModal('<div class="client-profile-head"><div><div class="sm">Ficha de cliente</div><h2>'+esc(c.nombre)+'</h2></div><span class="chip '+(c.activo===false?'warn':'ok')+'">'+(c.activo===false?'Suspendido':'Activo')+'</span></div>'+
+    '<div class="client-profile-tabs">'+nav.map(function(pair){return '<button class="btn sm client-profile-tab '+(CLIENTE_FICHA.tab===pair[0]?'pri':'')+'" data-a="clientProfileTab" data-id="'+id+'" data-tab="'+pair[0]+'">'+pair[1]+'</button>';}).join('')+'</div>'+content+
+    '<div class="actions"><button class="btn" data-a="closeClientProfile">Cerrar ficha</button></div>',true);
+}
+
+function getClientCredentialEntries(id){
+  var c=S.clientes[id];
+  if(!c||!VAULT.key) return [];
+  return VAULT.data.map(function(item,idx){return {item:item,idx:idx};}).filter(function(entry){
+    return entry.item.clienteId===id||(!entry.item.clienteId&&entry.item.cliente===c.nombre);
+  });
 }
 
 function vGrupos(){
@@ -763,9 +892,11 @@ function vGrupos(){
 }
 
 function vAjustes(){
-  return '<div class="card" style="max-width:600px"><b>Seguridad</b><p class="sm">Contraseña de acceso a la bitácora.</p>'+
-    '<div class="fgrid"><div class="full"><label>Nueva Clave<input type="password" id="set_gate_pass" value="'+esc(gateCfg())+'"></label></div></div>'+
-    '<div class="actions" style="margin-top:12px"><button class="btn pri" data-a="saveGatePass">Guardar Clave</button>'+(gateCfg()?' <button class="btn danger" data-a="removeGatePass">Quitar Clave</button> <button class="btn danger" data-a="lockApp">🔒 Cerrar sesión ahora</button>':'')+'</div></div>'+
+  var enabled=gateEnabled();
+  return '<div class="card" style="max-width:600px"><b>Seguridad</b><p class="sm">Clave de acceso compartida entre dispositivos cuando la bitácora está sincronizada. Se guarda como verificador cifrado, no como texto legible.</p>'+
+    '<div class="sm" style="margin-bottom:8px">Estado: '+(enabled?'🔒 Acceso protegido':'⚠️ Sin clave configurada')+'</div>'+
+    '<div class="fgrid"><div class="full"><label>'+(enabled?'Cambiar clave de acceso':'Crear clave de acceso')+'<input type="password" id="set_gate_pass" placeholder="'+(enabled?'Deja vacío para conservar la clave actual':'Mínimo 6 caracteres')+'" autocomplete="new-password"></label></div></div>'+
+    '<div class="actions" style="margin-top:12px"><button class="btn pri" data-a="saveGatePass">Guardar clave</button>'+(enabled?' <button class="btn danger" data-a="removeGatePass">Quitar clave</button> <button class="btn danger" data-a="lockApp">🔒 Cerrar sesión ahora</button>':'')+'</div></div>'+
   '<div class="card" style="max-width:600px;border-left:4px solid var(--bad)"><b style="color:var(--bad)">⚠️ Mantenimiento</b>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
       '<button class="btn info" data-a="descargarRespaldoManual">📥 Descargar Respaldo</button>'+
@@ -801,7 +932,7 @@ function modalCliente(id){
   var c = id ? S.clientes[id] : {nombre:'',ruc:'',celular:'',tipo:'PERSONA NATURAL',contabilidad:false,cobra:true,tarifa:0,cobroFreq:'M',doc:'recibo',grupo:'',obl:{},activo:true};
   var cat = getOblList();
   var mens = cat.filter(function(o){ return o.f === 'P'; }); var sem = cat.filter(function(o){ return o.f === 'S'; }); var anu = cat.filter(function(o){ return o.f === 'A'; });
-  var renderObGroup = function(items){ return items.map(function(o){ var checked = (c.obl && c.obl[o.k] === true) ? 'checked' : ''; return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>'; }).join(''); };
+  var renderObGroup = function(items){ return items.map(function(o){ var checked = (id?clientObligationEnabled(c,o):false) ? 'checked' : ''; return '<label class="ob-item"><input type="checkbox" class="chk-obl" data-k="'+o.k+'" '+checked+'> '+esc(o.n)+'</label>'; }).join(''); };
   openModal('<h2>'+(id?'Editar':'Nuevo')+' cliente</h2>'+
   '<div class="fgrid">'+
     '<div class="full"><label>Nombre / Razón Social<input id="m_nombre" value="'+esc(c.nombre)+'"></label></div>'+
@@ -819,7 +950,7 @@ function modalCliente(id){
       (sem.length ? '<div class="sec-title">Semestrales</div><div class="ob-grid">'+renderObGroup(sem)+'</div>' : '')+
       '<div class="sec-title">Anuales</div><div class="ob-grid">'+renderObGroup(anu)+'</div>'+
     '</div></div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="'+(id||'')+'">Guardar</button></div>', true);
+  '<div class="actions"><button class="btn" data-a="cancelClientEdit" data-id="'+(id||'')+'">Cancelar</button><button class="btn pri" data-a="saveCliente" data-id="'+(id||'')+'">Guardar</button></div>', true);
 }
 
 function modalObl(key){
@@ -833,16 +964,23 @@ function modalObl(key){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveObl" data-orig="'+(key||'')+'">Guardar</button></div>');
 }
 
-function modalClave(){
+function modalClave(index,cid){
   var clis = clientesList();
-  openModal('<h2>Nueva Credencial</h2><div class="fgrid">'+
-    '<div class="full"><label>Cliente<select id="vk_cli_sel"><option value="">-- Seleccionar --</option>'+clis.map(function(c){ return '<option value="'+esc(c.nombre)+'">'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
-    '<div class="full"><label>O escribe el nombre<input id="vk_cli_txt"></label></div>'+
-    '<div><label>Servicio<select id="vk_srv_sel" data-f="srv_sel"><option value="SRI">SRI</option><option value="IESS">IESS</option><option value="Supercias">Supercias</option><option value="Firma Electrónica">Firma Electrónica</option><option value="OTRO">Otro</option></select></label></div>'+
-    '<div><input id="vk_srv_txt" placeholder="Nombre del servicio" style="display:none;margin-top:18px"></div>'+
-    '<div class="full"><label>Usuario<input id="vk_usr"></label></div>'+
-    '<div class="full"><label>Contraseña<input id="vk_pwd" type="text"></label></div></div>'+
-  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveClave">Guardar Cifrado</button></div>');
+  var editing=index!==undefined&&index!==null;
+  var item=editing?VAULT.data[Number(index)]:null;
+  if(editing&&!item) return;
+  var selectedId=cid||(item&&item.clienteId)||'';
+  if(!selectedId&&item&&item.cliente){
+    var match=clis.find(function(c){return c.nombre===item.cliente;});
+    if(match) selectedId=match.id;
+  }
+  var service=item&&item.servicio||'';
+  openModal('<h2>'+(editing?'Editar':'Nueva')+' credencial</h2><div class="fgrid">'+
+    '<div class="full"><label>Cliente<select id="vk_cli_sel" required><option value="">-- Selecciona un cliente --</option>'+clis.map(function(c){ return '<option value="'+esc(c.id)+'" '+(c.id===selectedId?'selected':'')+'>'+esc(c.nombre)+' ('+esc(c.ruc)+')</option>'; }).join('')+'</select></label></div>'+
+    '<div class="full"><label>Servicio o sitio<input id="vk_srv" list="vk_service_options" value="'+esc(service)+'" placeholder="Ej.: SRI, IESS, Supercias" required><datalist id="vk_service_options"><option value="SRI"><option value="IESS"><option value="Supercias"><option value="Firma Electrónica"></datalist></label></div>'+
+    '<div class="full"><label>Usuario<input id="vk_usr" value="'+esc(item&&item.usuario||'')+'" autocomplete="off"></label></div>'+
+    '<div class="full"><label>Clave del sitio<input id="vk_pwd" type="password" value="'+esc(item&&item.clave||'')+'" autocomplete="new-password"></label></div></div>'+
+  '<div class="actions"><button class="btn" data-a="cancelCredential" data-id="'+esc(selectedId)+'">Cancelar</button><button class="btn pri" data-a="saveClave" data-i="'+(editing?index:'')+'">'+(editing?'Guardar cambios':'Guardar cifrado')+'</button></div>');
 }
 
 function modalCobro(cid, conceptoDef, fechaSugerida){
@@ -971,10 +1109,101 @@ var ACT={
   tab:function(d){UI.tab=d.k; render(); document.querySelector('.sidebar').classList.remove('open'); document.querySelector('.overlay').classList.remove('open');},
   ctype:function(d){UI.ctype=d.k; UI.cper=defaultPeriod(d.k); render();},
   ayShift:function(d){UI.ay+=+d.dir; render();},
-  loginGate:function(){ var p=val('g_pass_input'); if(p===gateCfg()){ GATE.logged=true; render(); } else toast('Contraseña incorrecta'); },
-  lockApp:function(){ GATE.logged=false; render(); toast('Sesión cerrada'); },
-  saveGatePass:function(){ var p=val('set_gate_pass').trim(); if(p){ localStorage.setItem('bitacora_gate_pass',p); toast('Clave guardada'); } else { localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); } GATE.logged=true; render(); },
-  removeGatePass:function(){ localStorage.removeItem('bitacora_gate_pass'); toast('Clave removida'); GATE.logged=true; render(); },
+  loginGate:async function(){
+    var pass=val('g_pass_input'),config=gateCfg(),valid=false;
+    if(config) valid=await verifyGatePassword(pass,config);
+    else valid=pass===legacyGateCfg();
+    if(valid){GATE.logged=true;render();}
+    else toast('Contraseña incorrecta');
+  },
+  lockApp:function(){
+    if(!gateEnabled()){UI.tab='ajustes';render();toast('Configura primero una clave de acceso');return;}
+    GATE.logged=false; VAULT.key=null; VAULT.data=[]; CLIENTE_FICHA.id=''; closeModal(); render(); toast('Sesión cerrada');
+  },
+  saveGatePass:async function(){
+    var pass=val('set_gate_pass').trim();
+    if(!pass){toast('Escribe una nueva clave; deja el campo vacío para conservar la actual');return;}
+    if(pass.length<6){toast('Clave mínima de 6 caracteres');return;}
+    try{
+      if(Store.db){
+        var config=await createGateConfig(pass);
+        await Store.db.doc('config/accessGate').set(config);
+        S.config.accessGate=config;
+        try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
+      }else{
+        localStorage.setItem('bitacora_gate_pass',pass);
+      }
+      GATE.logged=true;render();toast('Clave de acceso guardada');
+    }catch(error){
+      console.error('Error al guardar la clave de acceso:',error);
+      toast('No se pudo guardar la clave. Revisa la conexión e inténtalo otra vez.');
+    }
+  },
+  removeGatePass:async function(){
+    try{
+      if(Store.db&&gateCfg()){
+        await Store.db.doc('config/accessGate').delete();
+        delete S.config.accessGate;
+      }
+      try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}
+      GATE.logged=true;render();toast('Clave de acceso removida');
+    }catch(error){
+      console.error('Error al quitar la clave de acceso:',error);
+      toast('No se pudo quitar la clave. Revisa la conexión e inténtalo otra vez.');
+    }
+  },
+  securitySettings:function(){UI.tab='ajustes';render();},
+  reloadApp:function(){location.reload();},
+  openClientProfile:function(d){ VAULT.key=null; VAULT.data=[]; renderClientProfile(d.id,'resumen'); },
+  cancelClientEdit:function(d){ if(CLIENTE_FICHA.id) renderClientProfile(d.id||CLIENTE_FICHA.id,'resumen'); else closeModal(); },
+  clientProfileTab:function(d){
+    if(CLIENTE_FICHA.tab==='claves'&&d.tab!=='claves'){VAULT.key=null;VAULT.data=[];}
+    renderClientProfile(d.id,d.tab);
+  },
+  closeClientProfile:function(){ CLIENTE_FICHA.id=''; VAULT.key=null; VAULT.data=[]; closeModal(); },
+  lockClientVault:function(){ VAULT.key=null; VAULT.data=[]; renderClientProfile(CLIENTE_FICHA.id,'claves'); toast('Bóveda bloqueada'); },
+  cancelCredential:function(d){ renderClientProfile(d.id,'claves'); },
+  saveClientObligations:async function(d){
+    var c=S.clientes[d.id]; if(!c) return;
+    var selected={}; document.querySelectorAll('.client-obligation').forEach(function(input){selected[input.dataset.k]=input.checked;});
+    var obl=clean(c.obl||{});
+    getOblList().forEach(function(o){obl[o.k]=selected[o.k]===true;});
+    Object.keys(obl).forEach(function(k){if(selected[k]!==true) obl[k]=false;});
+    var updated=clean(c); updated.obl=obl;
+    await Store.put('clientes',d.id,updated);
+    toast('Obligaciones actualizadas'); renderClientProfile(d.id,'obligaciones');
+  },
+  clearClientObligations:async function(){
+    if(!confirm('Se descargará un respaldo y se desmarcarán las obligaciones de todos los clientes. Se conservarán clientes, cobros y avances registrados. ¿Continuar?')) return;
+    var list=clientesList(); if(!list.length){toast('No hay clientes para actualizar');return;}
+    Store.descargarRespaldo();
+    var keys={}; getOblList().forEach(function(o){keys[o.k]=true;});
+    list.forEach(function(c){Object.keys(c.obl||{}).forEach(function(k){keys[k]=true;});});
+    var updated=list.map(function(c){
+      var value=clean(S.clientes[c.id]); value.obl={};
+      Object.keys(keys).forEach(function(k){value.obl[k]=false;});
+      return {id:c.id,value:value};
+    });
+    if(!Store.db){
+      updated.forEach(function(entry){S.clientes[entry.id]=entry.value;});
+      Store.saveLocal(); render(); toast('Todos los clientes quedaron sin obligaciones'); return;
+    }
+    var completed=0;
+    try{
+      for(var start=0;start<updated.length;start+=450){
+        var chunk=updated.slice(start,start+450), batch=Store.db.batch();
+        chunk.forEach(function(entry){batch.set(Store.db.doc('clientes/'+entry.id),entry.value);});
+        await batch.commit();
+        chunk.forEach(function(entry){S.clientes[entry.id]=entry.value;});
+        completed+=chunk.length;
+      }
+      render(); toast('Todos los clientes quedaron sin obligaciones');
+    }catch(error){
+      console.error('Error al desmarcar obligaciones:',error);
+      render();
+      toast('Se actualizaron '+completed+' de '+updated.length+' clientes. Revisa la conexión y vuelve a intentarlo.');
+    }
+  },
   nuevaObl:function(){ modalObl(null); },
   editObl:function(d){ modalObl(d.k); },
   saveObl:async function(d){ var k=val('mo_k').trim().toUpperCase(), n=val('mo_n').trim(), f=val('mo_f'), m=+val('mo_m'), dVal=val('mo_d'); if(!k||!n){toast('Ingresa código y nombre');return;} await Store.put('catObl', k, {k:k, n:n, f:f, m:m, d: dVal==='RUC'?'RUC':+dVal}); closeModal(); toast('Guardado'); },
@@ -1072,6 +1301,7 @@ var ACT={
         var text = e.target.result;
         var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
         var count = 0;
+        var noObligations={}; getOblList().forEach(function(o){noObligations[o.k]=false;});
         for (var i = 1; i < lines.length; i++) {
           var parts = lines[i].split(/[;,]/).map(function(s){ return s.trim(); });
           if (parts.length >= 2 && parts[0]) {
@@ -1081,7 +1311,7 @@ var ACT={
             var grupo = parts[3] || '';
             var tarifa = parseFloat(parts[4]) || 0;
             var id = 'c' + ruc.replace(/\D/g,'');
-            await Store.put('clientes', id, {nombre: nombre, ruc: ruc, celular: cel, grupo: grupo, tarifa: tarifa, tipo: 'PERSONA NATURAL', cobra: true, doc: 'recibo', cobroFreq: 'M', obl: {}, activo: true});
+            await Store.put('clientes', id, {nombre: nombre, ruc: ruc, celular: cel, grupo: grupo, tarifa: tarifa, tipo: 'PERSONA NATURAL', cobra: true, doc: 'recibo', cobroFreq: 'M', obl: noObligations, activo: true});
             count++;
           }
         }
@@ -1094,27 +1324,40 @@ var ACT={
   restablecerSistemaCompleto:async function(){ if(confirm('🚨 ¡ATENCIÓN! ¿Restablecer TODO el sistema?\n\nSe descargará un respaldo automático.')){ Store.descargarRespaldo(); for(var i=0; i<COLS.length; i++){ await Store.clearCollection(COLS[i]); } toast('Restablecido'); setTimeout(function(){ location.reload(); }, 1500); } },
   imprimirRecibo:function(d){ imprimirReciboCobro(d.id); },
   imprimirReciboMult:function(d){ imprimirReciboMultiple(d.rid); },
-  vSetup:async function(){ var p=val('v_pass'); if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;} var salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter); await Store.put('boveda','meta',{salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA'})}); VAULT.key=key; render(); toast('Bóveda configurada'); },
-  vUnlock:async function(){ var p=val('v_pass'),m=S.boveda.meta; try{ var key=await deriveKey(p,unb64(m.salt),m.iter); var ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0; VAULT.key=key; await loadVaultItems(); render(); toast('Bóveda abierta'); }catch(e){toast('Clave incorrecta');} },
+  vSetup:async function(){ var p=val('v_pass'); if(!p||p.length<6){toast('Clave mínima de 6 caracteres');return;} var salt=crypto.getRandomValues(new Uint8Array(16)),iter=100000,key=await deriveKey(p,salt,iter); await Store.put('boveda','meta',{salt:b64(salt),iter:iter,check:await encJSON(key,{ok:'BITACORA'})}); VAULT.key=key; if(CLIENTE_FICHA.id) renderClientProfile(CLIENTE_FICHA.id,'claves'); else render(); toast('Bóveda configurada'); },
+  vUnlock:async function(){ var p=val('v_pass'),m=S.boveda.meta; try{ var key=await deriveKey(p,unb64(m.salt),m.iter); var ck=await decJSON(key,m.check);if(ck.ok!=='BITACORA')throw 0; VAULT.key=key; await loadVaultItems(); if(CLIENTE_FICHA.id) renderClientProfile(CLIENTE_FICHA.id,'claves'); else render(); toast('Bóveda abierta'); }catch(e){toast('Clave incorrecta');} },
   vLock:function(){ VAULT.key=null; VAULT.data=[]; render(); toast('Bóveda cerrada'); },
-  nuevaClave:function(){ modalClave(); },
-  saveClave:async function(){ var cliSel=val('vk_cli_sel'), cliTxt=val('vk_cli_txt').trim(); var cli = cliSel || cliTxt; var srv = val('vk_srv_sel'); if(srv==='OTRO') srv = val('vk_srv_txt').trim(); var usr=val('vk_usr').trim(), pwd=val('vk_pwd').trim(); if(!cli||!usr||!pwd){toast('Selecciona cliente e ingresa usuario y clave');return;} VAULT.data.push({cliente:cli,servicio:srv||'SRI',usuario:usr,clave:pwd}); await saveVaultItems(); closeModal(); render(); toast('Credencial guardada'); },
-  delClave:async function(d){ VAULT.data.splice(Number(d.i),1); await saveVaultItems(); render(); toast('Eliminada'); },
+  nuevaClave:function(d){ modalClave(null,d.cid); },
+  editClave:function(d){ modalClave(d.i); },
+  saveClave:async function(d){
+    var clientId=val('vk_cli_sel'), client=clientId?S.clientes[clientId]:null;
+    var servicio=val('vk_srv').trim(), usuario=val('vk_usr').trim(), clave=val('vk_pwd');
+    if(!client||!servicio||!usuario||!clave){toast('Selecciona el cliente e ingresa servicio, usuario y clave');return;}
+    var credential={cliente:client.nombre,clienteId:clientId,servicio:servicio,usuario:usuario,clave:clave};
+    if(d.i==='') VAULT.data.push(credential);
+    else VAULT.data[Number(d.i)]=credential;
+    await saveVaultItems(); renderClientProfile(clientId,'claves'); toast(d.i===''?'Credencial guardada':'Credencial actualizada');
+  },
+  delClave:async function(d){ if(!confirm('¿Eliminar esta credencial?')) return; VAULT.data.splice(Number(d.i),1); await saveVaultItems(); renderClientProfile(CLIENTE_FICHA.id,'claves'); toast('Credencial eliminada'); },
   showPass:function(d){ var el=$('#vp_'+d.i); if(el) el.type = el.type==='password'?'text':'password'; },
   nuevoCliente:function(){ modalCliente(null); },
   editCliente:function(d){ modalCliente(d.id); },
   toggleSuspend:async function(d){ var c = clean(S.clientes[d.id]); if(!c) return; c.activo = c.activo === false; await Store.put('clientes', d.id, c); toast(c.activo ? 'Reactivado' : 'Suspendido'); },
-  saveCliente:function(d){
+  saveCliente:async function(d){
     var nombre=val('m_nombre').trim(), ruc=val('m_ruc').trim(); if(!nombre||!ruc){toast('Llena nombre y RUC');return;}
     var oblMap = {}; document.querySelectorAll('.chk-obl').forEach(function(chk){ oblMap[chk.dataset.k] = chk.checked; });
     // ✅ FIX: se eliminó cobroFreq (no existe el input); se usa 'M' por defecto
     var c={nombre:nombre,ruc:ruc,celular:val('m_celular').trim(),tipo:val('m_tipo'),grupo:val('m_grupo').trim(),activo: val('m_activo') === 'true',cobra: val('m_cobra') === 'true',tarifa: +val('m_tarifa') || 0,cobroFreq:'M',doc: val('m_doc'),obl: oblMap};
-    Store.put('clientes', d.id || ('c' + ruc), c); closeModal(); toast('Cliente guardado');
+    var id=d.id||('c'+ruc);
+    await Store.put('clientes',id,c);
+    if(CLIENTE_FICHA.id===id) renderClientProfile(id,'resumen');
+    else closeModal();
+    toast('Cliente guardado');
   },
   anCellDist:function(d){ modalAnDist(d.c, +d.y, +d.m); },
   close:function(){ closeModal(); },
   // ✅ FIX: protege e.target sin classList
-  bgclose:function(d,e){ if(e && e.target && e.target.classList && e.target.classList.contains('bg')) closeModal(); }
+  bgclose:function(d,e){ if(e && e.target && e.target.classList && e.target.classList.contains('bg')){CLIENTE_FICHA.id='';VAULT.key=null;VAULT.data=[];closeModal();} }
 };
 
 document.addEventListener('click',function(e){ var b=e.target.closest('[data-a]');if(!b)return; var fn=ACT[b.dataset.a];if(fn)fn(b.dataset,e); });
