@@ -438,15 +438,24 @@ var Store={
     if(dbConn){
       this.db=dbConn; S.kind='nube';
       COLS.forEach(function(col){
+        if(col==='config'){
+          dbConn.doc('config/accessGate').onSnapshot(function(doc){
+            S.config=doc.exists?{accessGate:doc.data()}:{};
+            loaded[col]=true;S.configReady=true;S.configError=false;
+            if(S.config.accessGate&&legacyGateCfg()){try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}}
+            if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); migrateLegacyGate(); }
+          },function(err){
+            loaded[col]=true;S.configReady=true;S.configError=true;
+            console.error('No se pudo verificar la configuración de acceso:',err);
+            if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); }
+          });
+          return;
+        }
         dbConn.collection(col).onSnapshot(function(snap){
           var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
           S[col]=o; loaded[col]=true;
-          if(col==='config'){
-            S.configReady=true;S.configError=false;
-            if(S.config.accessGate&&legacyGateCfg()){try{localStorage.removeItem('bitacora_gate_pass');}catch(e){}}
-          }
           if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); migrateLegacyGate(); }
-        }, function(err){ loaded[col]=true; if(col==='config'){S.configReady=true;S.configError=true;console.error('No se pudo verificar la configuración de acceso:',err);} if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); } });
+        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; render(); } });
       });
     }else{
       S.kind='local';
@@ -530,7 +539,7 @@ function render(){
   }
   if(Store.db&&S.configError&&!legacyGateCfg()){
     $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
-    $('#main').innerHTML='<div class="card"><b>No se pudo verificar el acceso</b><p class="sm">La aplicación no abrirá los datos hasta confirmar si existe una clave principal. Revisa la conexión y recarga.</p><button class="btn pri" data-a="reloadApp">Reintentar</button></div>';
+    $('#main').innerHTML='<div class="card"><b>No se pudo verificar el acceso</b><p class="sm">Firebase no permite leer el documento de configuración de acceso. Un administrador debe permitir la lectura de <code>config/accessGate</code> en las reglas de Firestore; no es necesario abrir toda la colección. Después, recarga la página.</p><button class="btn pri" data-a="reloadApp">Reintentar</button></div>';
     return;
   }
   if(cfgPass && !GATE.logged){
