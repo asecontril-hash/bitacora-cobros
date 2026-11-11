@@ -102,8 +102,11 @@ td.r,th.r{text-align:right}
 .fgrid label{display:block;font-size:12.5px;color:var(--mut);font-weight:600}
 .fgrid input,.fgrid select{width:100%;margin-top:3px}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+
+/* FIX TOAST (MENSAJE EMERGENTE) */
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
-#toast div{background:#1b2733;color:#fff;padding:99px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+#toast div{background:#1b2733;color:#fff;padding:9px 14px;border-radius:99px;font-size:14px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+
 table.ym th,table.ym td{padding:5px 4px;text-align:center}
 table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:190px;max-width:230px}
 .cl{display:inline-block;min-width:34px;padding:3px 4px;border-radius:7px;font-size:12px;font-weight:700;border:0;font-family:inherit;cursor:pointer}
@@ -225,7 +228,6 @@ var DEFAULT_OBL=[
 var DIA_POR_DIGITO={1:10,2:12,3:14,4:16,5:18,6:20,7:22,8:24,9:26,0:28};
 var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
-/* SISTEMA DE AUTENTICACIÓN Y ROLES DE USUARIO */
 var CURRENT_USER = null;
 
 var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},usuarios:{},ready:false,kind:'…'};
@@ -402,30 +404,30 @@ var Store={
   init: async function(){
     var dbConn=null;
     try{ if(window.AppDB&&window.AppDB.use) dbConn=await window.AppDB.use('db'); }catch(e){ dbConn=null; }
-    setTimeout(function(){ if(!S.ready){ S.ready=true; this.initAdminUser(); render(); } }.bind(this), 800);
+    setTimeout(function(){ if(!S.ready){ S.ready=true; Store.checkAdminUser(); render(); } }, 800);
     if(dbConn){
       this.db=dbConn; S.kind='nube';
       COLS.forEach(function(col){
         dbConn.collection(col).onSnapshot(function(snap){
           var o={}; snap.docs.forEach(function(d){ o[d.id]=d.data(); });
           S[col]=o; loaded[col]=true;
-          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.initAdminUser(); render(); }
-        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.initAdminUser(); render(); } });
+          if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.checkAdminUser(); render(); }
+        }, function(err){ loaded[col]=true; if(COLS.every(function(c){ return loaded[c]; })){ S.ready=true; Store.checkAdminUser(); render(); } });
       });
     }else{
       S.kind='local';
       try{ var raw=localStorage.getItem('bitacora_v1'); if(raw){ var d=JSON.parse(raw); COLS.forEach(function(c){ S[c]=d[c]||{}; }); } }catch(e){}
-      S.ready=true; this.initAdminUser(); render();
+      S.ready=true; Store.checkAdminUser(); render();
     }
   },
-  initAdminUser: async function(){
-    if(!S.usuarios || Object.keys(S.usuarios).length === 0){
+  checkAdminUser: async function(){
+    if(S.ready && (!S.usuarios || Object.keys(S.usuarios).length === 0)){
       var adminUser = { username: 'admin', nombre: 'Administrador principal', pass: 'admin123', rol: 'ADMIN' };
       await this.put('usuarios', 'usr_admin', adminUser);
     }
   },
   saveLocal: function(){ try{ var obj={}; COLS.forEach(function(c){ obj[c]=S[c]; }); localStorage.setItem('bitacora_v1', JSON.stringify(obj)); }catch(e){} },
-  put: async function(col,id,data){ data=clean(data); S[col][id]=data; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar'); } } else this.saveLocal(); },
+  put: async function(col,id,data){ data=clean(data); S[col][id]=data; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).set(data); }catch(e){ toast('Error al guardar en Firebase'); } } else this.saveLocal(); },
   del: async function(col,id){ delete S[col][id]; render(); if(this.db){ try{ await this.db.doc(col+'/'+id).delete(); }catch(e){ toast('Error al eliminar'); } } else this.saveLocal(); },
   clearCollection: async function(col){
     S[col] = {}; render();
@@ -511,7 +513,6 @@ function render(){
     return;
   }
 
-  // Filtrar Pestañas según el rol
   var navTabs = TABS_ALL.filter(function(tab){ return tab.roles.includes(CURRENT_USER.rol); });
   if(!navTabs.some(function(t){ return t.id === UI.tab; })){
     UI.tab = navTabs[0].id;
