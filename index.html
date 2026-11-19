@@ -41,20 +41,19 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-ap
 .sidebar h1 span{font-size:14px;color:var(--mut);font-weight:normal;display:block;margin-top:2px}
 .brand-logo{display:block;object-fit:contain;background:#fff;border-radius:8px}
 .sidebar-brand{display:flex;align-items:center;gap:8px;padding:4px 4px 16px}
-.sidebar-brand img{width:48px;flex-shrink:0}
 .sidebar-brand h1{font-size:16px;line-height:1.2;margin:0;color:var(--pri)}
 .sidebar-brand h1 span{font-size:12px}
-.login-logo{width:126px;height:auto;margin:2px auto 12px}
+.login-logo{width:180px;height:auto;margin:2px auto 14px}
 .menu-btn{background:none;border:0;padding:10px 12px;border-radius:8px;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;margin-bottom:4px;transition:background .2s}
 .menu-btn:hover{background:var(--bg)}
 .menu-btn.on{background:var(--pri-soft);color:var(--pri)}
 .content{flex:1;padding:20px;overflow-y:auto;width:100%;max-width:100%}
 .app-header{position:relative;height:var(--app-header-height);flex:0 0 var(--app-header-height);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 18px;background:var(--card);border-bottom:1px solid var(--line);z-index:45}
 .logged-out .app-header,.logged-out .sidebar{display:none}
-.logged-out .layout{height:100vh}
+.logged-out .layout{height:100vh;background-color:#17333d;background-image:linear-gradient(110deg,rgba(5,31,42,.44),rgba(10,52,61,.25)),url("assets/login-background.webp");background-size:cover;background-position:center}
 .logged-out .content{display:flex;align-items:center;justify-content:center}
 .logged-out #main{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:100%}
-.login-card{width:100%;max-width:380px;margin:0;text-align:center}
+.login-card{width:100%;max-width:400px;margin:0;padding:24px 26px;text-align:center;box-shadow:0 18px 48px rgba(20,50,70,.14)}
 .header-brand,.header-actions,.header-account{display:flex;align-items:center}
 .header-brand{gap:8px;min-width:0}
 .header-brand img{width:42px;height:42px}
@@ -87,6 +86,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-ap
   .btn-menu-movil{display:inline-flex;font-size:22px}
   .page-sticky{top:-15px;margin:-15px -15px 12px;padding:10px 15px 8px}
   .page-sticky h2{font-size:17px}
+  .logged-out .layout{background-position:62% center}
   .overlay.open{display:block}
 }
 
@@ -574,7 +574,7 @@ function render(){
     UI.tab = navTabs[0].id;
   }
 
-  $('#sidebar').innerHTML='<div class="sidebar-brand"><img class="brand-logo" src="assets/asecontril-logo.webp" alt=""><h1>ASECONTRIL <span>Bitácora Contable</span></h1></div>'+
+  $('#sidebar').innerHTML='<div class="sidebar-brand"><h1>ASECONTRIL <span>Bitácora Contable</span></h1></div>'+
     navTabs.map(function(t){ return '<button class="menu-btn '+(UI.tab===t.id?'on':'')+'" data-a="tab" data-k="'+t.id+'">'+t.name+'</button>'; }).join('')+
     '<div style="margin-top:auto;padding:10px;font-size:11px;color:var(--mut);text-align:center">'+(S.kind==='nube'?'☁️ Sincronizado':'💾 Local')+'</div>';
   renderCurrentView();
