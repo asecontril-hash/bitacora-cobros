@@ -270,7 +270,7 @@ var TIPOLBL={M:'Mensual',S:'Semestral',A:'Anual'};
 
 var CURRENT_USER = null;
 
-var S={boveda:{},clientes:{},cobros:{},recibos:{},avances:{},config:{},catObl:{},usuarios:{},ready:false,kind:'…'};
+var S={boveda:{},clientes:{},cobros:{},recibos:{},anticipos:{},avances:{},config:{},catObl:{},usuarios:{},ready:false,kind:'…'};
 var loaded={};
 var now=new Date();
 var UI={ ay:new Date().getFullYear(), tab:'panel', ctype:'M', cper:null, q_cli:'', q_ctrl:'', q_anual:'', fgr:'todos', ordenAnual:'alfabetico', q_cobros:'', fgr_cobros:'todos' };
@@ -435,10 +435,18 @@ function cobroCalc(x){
   var est=x.anulado?'anulado':pagado>=monto&&monto>0?'pagado':pagado>0?'parcial':'pendiente';
   return {pagado:pagado, saldo:saldo, est:est};
 }
+function anticiposList(){ return Object.entries(S.anticipos||{}).map(function(pair){ return Object.assign({},pair[1],{id:pair[0]}); }); }
+function anticipoDisponible(x){
+  var aplicado=(x.aplicaciones||[]).reduce(function(s,a){ return s+(+a.monto||0); },0);
+  return Math.max(0,+((+x.monto||0)-aplicado).toFixed(2));
+}
+function totalAnticiposCliente(cid){
+  return anticiposList().filter(function(x){ return x.clienteId===cid && !x.anulado; }).reduce(function(s,x){ return s+anticipoDisponible(x); },0);
+}
 function estChip(e){ return {pagado:'<span class="chip ok">Pagado</span>',parcial:'<span class="chip warn">Abono parcial</span>',pendiente:'<span class="chip bad">Pendiente</span>',anulado:'<span class="chip mut">Anulado</span>'}[e]; }
 
 /* ============ BASE DE DATOS ============ */
-var COLS=['clientes','cobros','recibos','avances','config','boveda','catObl','usuarios'];
+var COLS=['clientes','cobros','recibos','anticipos','avances','config','boveda','catObl','usuarios'];
 var Store={
   db:null,
   init: async function(){
@@ -796,9 +804,11 @@ function vCobros(){
 
   var clientesArray = Object.values(porCliente);
   var recsList = recibosList();
+  var antsList = anticiposList().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
 
   return '<div class="bar">'+
     '<button class="btn pri" data-a="nuevoCobro">+ Crear Cuenta por Cobrar</button>'+
+    '<button class="btn" data-a="nuevoAnticipo">💵 Registrar Anticipo</button>'+
     grpSelectCobros()+
     searchInput('q_cobros', UI.q_cobros)+
   '</div>'+
@@ -806,10 +816,12 @@ function vCobros(){
     '<b>📌 Cuentas por Cobrar por Cliente</b>'+
     (clientesArray.length ? clientesArray.map(function(group){
       var celTxt = group.cliente.celular ? '📱 ' + esc(group.cliente.celular) : '<span style="color:var(--bad)">Sin celular</span>';
+      var anticipoDisponibleCliente=totalAnticiposCliente(group.cid);
       return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;background:var(--card)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px">'+
           '<div><b style="font-size:16px">'+esc(group.cliente.nombre)+'</b> <span class="sm">('+esc(group.cliente.ruc||'S/N')+' · '+celTxt+')</span></div>'+
-          '<div><span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> '+
+          '<div><span class="chip '+(group.totalSaldo>0?'warn':'ok')+'">Saldo Total: '+money(group.totalSaldo)+'</span> <span class="chip info">Anticipo disponible: '+money(anticipoDisponibleCliente)+'</span> '+
+            (anticipoDisponibleCliente>0 ? '<button class="btn sm" data-a="aplicarAnticipo" data-cid="'+group.cid+'">↘ Aplicar anticipo</button> ' : '')+
             (group.totalSaldo>0 ? '<button class="btn sm pri" data-a="cobroMultiple" data-cid="'+group.cid+'">💳 Cobro Múltiple</button> <button class="btn sm info" data-a="modalNotifCobro" data-cid="'+group.cid+'">📱 WhatsApp</button> <button class="btn sm" data-a="imprimirEstadoCuenta" data-cid="'+group.cid+'">🖨️ PDF</button>' : '')+
           '</div></div>'+
         '<div class="tablewrap"><table style="font-size:13px">'+
@@ -828,6 +840,14 @@ function vCobros(){
       '<tbody>'+recsList.map(function(r){
         var c = S.clientes[r.clienteId] || {nombre:'Cliente'};
         return '<tr><td><b>N.° '+r.id.slice(-6).toUpperCase()+'</b></td><td>'+fmtDate(r.fecha)+'</td><td>'+esc(c.nombre)+'</td><td><span class="chip info">'+esc(r.metodoPago||'Efectivo')+'</span></td><td>'+esc(r.referencia||'N/A')+'</td><td><b>'+money(r.montoTotal)+'</b></td><td><button class="btn sm pri" data-a="imprimirReciboMult" data-rid="'+r.id+'">🖨️ Imprimir</button></td></tr>';
+      }).join('')+'</tbody></table></div></div>' : '')+
+  (antsList.length ? '<div class="card" style="margin-top:14px"><b>💵 Anticipos de Clientes</b><div class="tablewrap"><table style="margin-top:8px;font-size:13px">'+
+      '<thead><tr><th>Fecha</th><th>Cliente</th><th>Monto</th><th>Aplicado</th><th>Disponible</th><th>Estado</th><th>Método</th><th>Referencia</th><th>Acciones</th></tr></thead>'+
+      '<tbody>'+antsList.map(function(a){
+        var c=S.clientes[a.clienteId]||{nombre:'Cliente'};
+        var disponible=anticipoDisponible(a);
+        var aplicado=Math.max(0,(+a.monto||0)-disponible);
+        return '<tr><td>'+fmtDate(a.fecha)+'</td><td>'+esc(c.nombre)+'</td><td><b>'+money(a.monto)+'</b></td><td>'+money(aplicado)+'</td><td><b style="color:'+ (disponible>0?'var(--info)':'var(--mut)')+'">'+money(a.anulado?0:disponible)+'</b></td><td>'+ (a.anulado?'Anulado':disponible>0?(aplicado>0?'Aplicado parcialmente':'Disponible'):'Aplicado') +'</td><td>'+esc(a.metodo||'Efectivo')+'</td><td>'+esc(a.referencia||'N/A')+'</td><td>'+(!a.anulado&&a.aplicaciones&&a.aplicaciones.length==0?'<button class="btn sm danger" data-a="anularAnticipo" data-id="'+a.id+'">Anular</button>':(a.anulado?'': '<button class="btn sm danger" data-a="anularAnticipo" data-id="'+a.id+'">Anular</button>'))+'</td></tr>';
       }).join('')+'</tbody></table></div></div>' : '');
 }
 
@@ -1048,12 +1068,40 @@ function modalCobro(cid, conceptoDef, fechaSugerida){
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveCobro">Guardar</button></div>');
 }
 
+function modalAnticipo(cid){
+  var clis=activos(); var c=cid?S.clientes[cid]:null;
+  openModal('<h2>Registrar Anticipo del Cliente</h2><p class="sm">El monto quedará a favor del cliente y podrá aplicarse a obligaciones futuras.</p><div class="fgrid">'+
+    '<div class="full"><label>Cliente<select id="ma_cli" data-f="ma_cli_sel"><option value="">-- Seleccionar --</option>'+clis.map(function(item){return '<option value="'+item.id+'" '+(item.id===cid?'selected':'')+'>'+esc(item.nombre)+'</option>';}).join('')+'</select></label></div>'+
+    '<div><label>Monto anticipado ($)<input id="ma_monto" type="number" step="0.01" min="0.01"></label></div>'+
+    '<div><label>Fecha<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Método<select id="ma_metodo"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option><option>Depósito</option></select></label></div>'+
+    '<div><label>Ref./Banco<input id="ma_ref"></label></div></div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAnticipo">Guardar Anticipo</button></div>');
+}
+
+function modalAplicarAnticipo(cid){
+  var c=S.clientes[cid]||{nombre:'Cliente'};
+  var disponibles=anticiposList().filter(function(x){return x.clienteId===cid&&!x.anulado&&anticipoDisponible(x)>0;});
+  var totalDisponible=disponibles.reduce(function(s,x){return s+anticipoDisponible(x);},0);
+  var pends=cobrosList().filter(function(x){return x.clienteId===cid&&!x.anulado&&cobroCalc(x).saldo>0;}).sort(function(a,b){return String(a.fechaEmision||'').localeCompare(String(b.fechaEmision||''));});
+  if(!totalDisponible){toast('El cliente no tiene anticipos disponibles');return;}
+  if(!pends.length){toast('No hay cuentas pendientes para aplicar el anticipo');return;}
+  openModal('<h2>Aplicar Anticipo · '+esc(c.nombre)+'</h2><p>Disponible: <b>'+money(totalDisponible)+'</b></p>'+
+  '<div class="tablewrap"><table style="font-size:13px"><thead><tr><th>Sel.</th><th>Emisión</th><th>Concepto</th><th>Saldo</th></tr></thead><tbody>'+
+    pends.map(function(item){var calc=cobroCalc(item);return '<tr><td><input type="checkbox" class="chk-aplicar-anticipo" data-id="'+item.id+'" data-saldo="'+calc.saldo+'" checked></td><td>'+fmtDate(item.fechaEmision)+'</td><td>'+esc(item.concepto)+'</td><td><b>'+money(calc.saldo)+'</b></td></tr>';}).join('')+
+  '</tbody></table></div><div class="fgrid" style="margin-top:12px">'+
+    '<div><label>Monto a aplicar ($)<input id="map_monto" type="number" step="0.01" min="0.01" max="'+totalDisponible+'" value="'+totalDisponible+'"></label></div>'+
+    '<div><label>Fecha<input id="map_fec" type="date" value="'+todayStr()+'"></label></div></div>'+
+  '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAplicarAnticipo" data-cid="'+cid+'">Aplicar a las cuentas</button></div>');
+}
+
 function modalAbono(id){
   var x = S.cobros[id]; if(!x) return; var c = S.clientes[x.clienteId]||{nombre:'Cliente'}; var calc = cobroCalc(x);
   openModal('<h2>Registrar Pago</h2><p><b>Cliente:</b> '+esc(c.nombre)+'<br><b>Concepto:</b> '+esc(x.concepto)+'<br><b>Saldo:</b> <span style="color:var(--bad)">'+money(calc.saldo)+'</span></p>'+
   '<div class="fgrid">'+
     '<div><label>Monto ($)<input id="ma_monto" type="number" step="0.01" value="'+calc.saldo+'"></label></div>'+
     '<div><label>Fecha<input id="ma_fec" type="date" value="'+todayStr()+'"></label></div>'+
+    '<div><label>Tipo de pago<select id="ma_tipo"><option value="abono">Abono a esta cuenta</option><option value="anticipo">Anticipo del cliente</option></select></label></div>'+
     '<div><label>Método<select id="ma_metodo"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option><option>Depósito</option></select></label></div>'+
     '<div><label>Ref./Banco<input id="ma_ref"></label></div></div>'+
   '<div class="actions"><button class="btn" data-a="close">Cancelar</button><button class="btn pri" data-a="saveAbono" data-id="'+id+'">Guardar Pago</button></div>');
@@ -1284,6 +1332,99 @@ var ACT={
     }
   },
   nuevoCobro:function(){ modalCobro(null, '', ''); },
+  nuevoAnticipo:function(d){ modalAnticipo(d.cid||''); },
+  aplicarAnticipo:function(d){ modalAplicarAnticipo(d.cid); },
+  anularAnticipo:async function(d){
+    var ant=S.anticipos[d.id];
+    if(!ant||ant.anulado){toast('Este anticipo ya está anulado');return;}
+    if(!confirm('¿Anular este anticipo? Se revertirán los abonos aplicados a las cuentas por cobrar.')) return;
+    var aplicaciones=ant.aplicaciones||[];
+    for(var i=0;i<aplicaciones.length;i++){
+      var app=aplicaciones[i];
+      var cobrosAplicados=app.cobros||[];
+      for(var j=0;j<cobrosAplicados.length;j++){
+        var cobroId=cobrosAplicados[j].cobroId, x=clean(S.cobros[cobroId]);
+        if(!x) continue;
+        x.abonos=(x.abonos||[]).filter(function(a){
+          var esDelAnticipo=a.tipo==='anticipo' && a.anticipoId===d.id;
+          return !esDelAnticipo;
+        });
+        await Store.put('cobros',cobroId,x);
+      }
+    }
+    ant.anulado=true;
+    ant.fechaAnulacion=todayStr();
+    await Store.put('anticipos',d.id,ant);
+    render();
+    toast('Anticipo anulado');
+  },
+  saveAnticipo:async function(){
+    var clienteId=val('ma_cli'), monto=+val('ma_monto'), fec=val('ma_fec'), metodo=val('ma_metodo'), ref=val('ma_ref').trim();
+    if(!clienteId||!monto||monto<=0||!fec){toast('Completa cliente, monto y fecha');return;}
+    var id='ant_'+uid();
+    await Store.put('anticipos',id,{id:id,clienteId:clienteId,monto:monto,fecha:fec,metodo:metodo,referencia:ref,aplicaciones:[]});
+    closeModal();toast('Anticipo registrado');
+  },
+  saveAplicarAnticipo:async function(d){
+    var cid=d.cid, monto=+val('map_monto'), fec=val('map_fec');
+    if(!monto||monto<=0||!fec){toast('Ingresa monto y fecha');return;}
+    var disponibles=anticiposList().filter(function(x){return x.clienteId===cid&&!x.anulado&&anticipoDisponible(x)>0;});
+    var totalDisponible=disponibles.reduce(function(s,x){return s+anticipoDisponible(x);},0);
+    if(monto>totalDisponible){toast('El monto supera el anticipo disponible');return;}
+    var checks=document.querySelectorAll('.chk-aplicar-anticipo:checked');
+    if(!checks.length){toast('Selecciona al menos una cuenta');return;}
+    var saldoSeleccionado=0;
+    for(var c=0;c<checks.length;c++){
+      var saldoCheck=+checks[c].dataset.saldo||0;
+      saldoSeleccionado+=saldoCheck;
+    }
+    if(monto>saldoSeleccionado){toast('Las cuentas seleccionadas tienen saldo insuficiente');return;}
+    var restante=monto, aplicado=0, detalles=[];
+    for(var i=0;i<checks.length&&restante>0;i++){
+      var cobroId=checks[i].dataset.id, x=clean(S.cobros[cobroId]), calc=cobroCalc(x);
+      if(!x||calc.saldo<=0) continue;
+      var usar=Math.min(restante,calc.saldo);
+      x.abonos=x.abonos||[]; x.abonos.push({f:fec,m:usar,metodo:'Anticipo',ref:'Aplicación de anticipo',tipo:'anticipo',anticipoId:''});
+      await Store.put('cobros',cobroId,x);
+      detalles.push({concepto:x.concepto,monto:usar,cobroId:cobroId});
+      aplicado+=usar; restante-=usar;
+    }
+    for(var j=0;j<disponibles.length&&aplicado>0;j++){
+      var ant=clean(disponibles[j]), disp=anticipoDisponible(ant), usarAnt=Math.min(aplicado,disp);
+      if(usarAnt<=0) continue;
+      ant.aplicaciones=ant.aplicaciones||[];
+      var cobrosAnt=[];
+      var pendienteAnt=usarAnt;
+      for(var k=0;k<detalles.length&&pendienteAnt>0;k++){
+        var detalle=detalles[k], usarDetalle=Math.min(pendienteAnt,detalle.monto);
+        cobrosAnt.push({cobroId:detalle.cobroId,monto:usarDetalle});
+        var cuenta=clean(S.cobros[detalle.cobroId]);
+        if(cuenta){
+          var restoDetalle=usarDetalle;
+          for(var h=(cuenta.abonos||[]).length-1;h>=0&&restoDetalle>0;h--){
+            var abono=cuenta.abonos[h];
+            if(abono.tipo==='anticipo'&&!abono.anticipoId&&abono.f===fec){
+              abono.anticipoId=ant.id;
+              restoDetalle-=+abono.m||0;
+              if(restoDetalle<0){
+                abono.m=(+abono.m||0)+restoDetalle;
+                restoDetalle=0;
+              }
+            }
+          }
+          await Store.put('cobros',detalle.cobroId,cuenta);
+        }
+        pendienteAnt-=usarDetalle;
+      }
+      ant.aplicaciones.push({fecha:fec,monto:usarAnt,cobros:cobrosAnt});
+      await Store.put('anticipos',ant.id,ant);
+      aplicado-=usarAnt;
+    }
+    if(aplicado>0){toast('No se pudo completar la aplicación del anticipo');return;}
+    var reciboId='rc_'+uid();
+    await Store.put('recibos',reciboId,{id:reciboId,clienteId:cid,fecha:fec,metodoPago:'Anticipo',referencia:'Aplicación de anticipos',montoTotal:monto,detalles:detalles,tipo:'anticipo'});
+    closeModal();toast('Anticipo aplicado');imprimirReciboMultiple(reciboId);
+  },
   crearCobroDesdeModal:function(d){ modalCobro(d.c, d.con, d.fec); },
   saveCobro:async function(){
     var clienteId=val('mc_cli'), concepto=val('mc_con').trim(), monto=+val('mc_mon'), fechaEmision=val('mc_fec');
@@ -1295,8 +1436,14 @@ var ACT={
   },
   abonarCobro:function(d){ modalAbono(d.id); },
   saveAbono:async function(d){
-    var monto = +val('ma_monto'), fec = val('ma_fec'), metodo = val('ma_metodo'), ref = val('ma_ref').trim();
-    if(!monto||!fec){toast('Ingresa monto y fecha');return;}
+    var monto = +val('ma_monto'), fec = val('ma_fec'), metodo = val('ma_metodo'), ref = val('ma_ref').trim(), tipo = val('ma_tipo');
+    if(!monto||monto<=0||!fec){toast('Ingresa monto y fecha');return;}
+    if(tipo==='anticipo'){
+      var cuentaAnt=clean(S.cobros[d.id]); if(!cuentaAnt) return;
+      var idAnt='ant_'+uid();
+      await Store.put('anticipos',idAnt,{id:idAnt,clienteId:cuentaAnt.clienteId,monto:monto,fecha:fec,metodo:metodo,referencia:ref,aplicaciones:[]});
+      closeModal();toast('Pago registrado como anticipo');return;
+    }
     var x = clean(S.cobros[d.id]); x.abonos = x.abonos || []; x.abonos.push({f:fec, m:monto, metodo:metodo, ref:ref});
     await Store.put('cobros', d.id, x); closeModal(); toast('Pago registrado');
   },
