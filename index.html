@@ -38,12 +38,20 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-ap
 .sidebar{width:250px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:15px 10px;flex-shrink:0;transition:transform .3s ease;z-index:40;overflow-y:auto}
 .sidebar h1{font-size:18px;margin:0 0 20px 10px;color:var(--pri);display:flex;align-items:center;gap:8px}
 .sidebar h1 span{font-size:14px;color:var(--mut);font-weight:normal;display:block;margin-top:2px}
+.brand-logo{display:block;object-fit:contain;background:#fff;border-radius:8px}
+.sidebar-brand{display:flex;align-items:center;gap:8px;padding:4px 4px 16px}
+.sidebar-brand img{width:48px;flex-shrink:0}
+.sidebar-brand h1{font-size:16px;line-height:1.2;margin:0;color:var(--pri)}
+.sidebar-brand h1 span{font-size:12px}
+.login-logo{width:126px;height:auto;margin:2px auto 12px}
 .menu-btn{background:none;border:0;padding:10px 12px;border-radius:8px;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;margin-bottom:4px;transition:background .2s}
 .menu-btn:hover{background:var(--bg)}
 .menu-btn.on{background:var(--pri-soft);color:var(--pri)}
 .content{flex:1;padding:20px;overflow-y:auto;width:100%;max-width:100%}
 .header-movil{display:none;background:var(--card);border-bottom:1px solid var(--line);padding:12px 15px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:30}
 .header-movil h1{font-size:16px;margin:0;color:var(--pri)}
+.mobile-brand{display:flex;align-items:center;gap:7px}
+.mobile-brand img{width:40px;height:40px}
 .btn-menu-movil{background:none;border:0;font-size:24px;cursor:pointer;color:var(--ink)}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:35}
 
@@ -191,7 +199,7 @@ table.ym td:first-child,table.ym th:first-child{text-align:left;position:sticky;
 <body>
 
 <header class="header-movil">
-  <h1>📒 ASECONTRIL</h1>
+  <div class="mobile-brand"><img class="brand-logo" src="assets/asecontril-logo.webp" alt=""><h1>ASECONTRIL</h1></div>
   <button class="btn-menu-movil" id="mobile-logout" data-a="logoutUser" title="Cerrar sesión" aria-label="Cerrar sesión" style="display:none;font-size:15px">🔒 Salir</button>
   <button class="btn-menu-movil" onclick="document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.overlay').classList.toggle('open');">☰</button>
 </header>
@@ -502,13 +510,13 @@ function render(){
 
   /* PANTALLA DE LOGIN DE USUARIOS */
   if(!CURRENT_USER){
-    $('#sidebar').innerHTML='<h1>📒 ASECONTRIL</h1>';
+    $('#sidebar').innerHTML='<div class="sidebar-brand"><img class="brand-logo" src="assets/asecontril-logo.webp" alt=""><h1>ASECONTRIL</h1></div>';
     $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
+      '<img class="brand-logo login-logo" src="assets/asecontril-logo.webp" alt="Logo ASECONTRIL">'+
       '<h2 style="margin-bottom:4px">🔑 Iniciar Sesión</h2><p class="sm" style="margin-bottom:16px">Acceso al sistema ASECONTRIL</p>'+
       '<input type="text" id="g_user_input" placeholder="Usuario" style="width:100%;margin-bottom:10px" autocomplete="username">'+
       '<input type="password" id="g_pass_input" placeholder="Contraseña" style="width:100%;margin-bottom:14px" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')ACT.loginUser()">'+
       '<button class="btn pri" data-a="loginUser" style="width:100%">Ingresar</button>'+
-      '<p class="sm" style="margin-top:14px;font-size:11px">Usuario inicial: <b>admin</b> / Clave: <b>admin123</b></p>'+
       '</div>';
     return;
   }
@@ -518,7 +526,7 @@ function render(){
     UI.tab = navTabs[0].id;
   }
 
-  $('#sidebar').innerHTML='<h1>📒 ASECONTRIL <span>Bitácora Contable</span></h1>'+
+  $('#sidebar').innerHTML='<div class="sidebar-brand"><img class="brand-logo" src="assets/asecontril-logo.webp" alt=""><h1>ASECONTRIL <span>Bitácora Contable</span></h1></div>'+
     navTabs.map(function(t){ return '<button class="menu-btn '+(UI.tab===t.id?'on':'')+'" data-a="tab" data-k="'+t.id+'">'+t.name+'</button>'; }).join('')+
     '<div style="margin-top:auto;padding:10px;font-size:11px;color:var(--mut);text-align:center">Usuario: <b>'+esc(CURRENT_USER.nombre)+'</b> ('+CURRENT_USER.rol+')<br>'+(S.kind==='nube'?'☁️ Sincronizado':'💾 Local')+'</div>'+
     '<button class="menu-btn" data-a="logoutUser" style="color:var(--bad)">🔒 Cerrar sesión</button>';
