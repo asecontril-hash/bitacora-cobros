@@ -50,6 +50,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-ap
 .menu-btn.on{background:var(--pri-soft);color:var(--pri)}
 .content{flex:1;padding:20px;overflow-y:auto;width:100%;max-width:100%}
 .app-header{position:relative;height:var(--app-header-height);flex:0 0 var(--app-header-height);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 18px;background:var(--card);border-bottom:1px solid var(--line);z-index:45}
+.logged-out .app-header,.logged-out .sidebar{display:none}
+.logged-out .layout{height:100vh}
+.logged-out .content{display:flex;align-items:center;justify-content:center}
+.logged-out #main{display:flex;flex:1;align-items:center;justify-content:center;width:100%;min-height:100%}
+.login-card{width:100%;max-width:380px;margin:0;text-align:center}
 .header-brand,.header-actions,.header-account{display:flex;align-items:center}
 .header-brand{gap:8px;min-width:0}
 .header-brand img{width:42px;height:42px}
@@ -107,9 +112,9 @@ button.btn:disabled{opacity:.5;cursor:default}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--card);color:var(--mut);padding:8px 12px;font:inherit;font-weight:600;cursor:pointer}
 .seg button.on{background:var(--pri);color:var(--pri-ink)}
-.tablewrap{overflow-x:auto}
+.tablewrap{max-height:65vh;overflow:auto}
 table{border-collapse:collapse;width:100%;min-width:760px}
-th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;z-index:2;background:var(--card);text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:0}
 td.r,th.r{text-align:right}
@@ -543,6 +548,7 @@ function renderCurrentView(){
 }
 
 function render(){
+  document.body.classList.toggle('logged-out',!CURRENT_USER);
   if(!S.ready){ $('#main').innerHTML='<div class="empty">Cargando…</div>'; return; }
 
   var headerAccount=$('#header-account');
@@ -552,8 +558,8 @@ function render(){
 
   /* PANTALLA DE LOGIN DE USUARIOS */
   if(!CURRENT_USER){
-    $('#sidebar').innerHTML='<div class="sidebar-brand"><img class="brand-logo" src="assets/asecontril-logo.webp" alt=""><h1>ASECONTRIL</h1></div>';
-    $('#main').innerHTML='<div class="card" style="max-width:380px;margin:50px auto;text-align:center">'+
+    $('#sidebar').innerHTML='';
+    $('#main').innerHTML='<div class="card login-card">'+
       '<img class="brand-logo login-logo" src="assets/asecontril-logo.webp" alt="Logo ASECONTRIL">'+
       '<h2 style="margin-bottom:4px">🔑 Iniciar Sesión</h2><p class="sm" style="margin-bottom:16px">Acceso al sistema ASECONTRIL</p>'+
       '<input type="text" id="g_user_input" placeholder="Usuario" style="width:100%;margin-bottom:10px" autocomplete="username">'+
